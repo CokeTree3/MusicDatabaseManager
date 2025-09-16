@@ -16,6 +16,28 @@ void printTree(string searchDir){
 }
 
 
+int directoryToLibrary(string searchDir, Library* library){
+    if(searchDir == "" || library == nullptr){
+        return 1;
+    }
+
+    for (auto i = filesystem::directory_iterator(searchDir); i != filesystem::directory_iterator(); ++i){
+        if(!i->is_directory()){
+            continue;
+        }
+        
+        //cout << i->path().lexically_relative(searchDir).string() << endl;
+        Artist newArtist(i->path().lexically_relative(searchDir).string(), i->path().string());
+
+        //newArtist.printData();
+        library->addToLibrary(newArtist);
+
+    }
+
+    return 0;
+}
+
+
 int main(int argc, char *argv[])
 {
     string searchDir = filesystem::current_path().string();
@@ -25,5 +47,8 @@ int main(int argc, char *argv[])
 
     Library library;
     
+    directoryToLibrary(searchDir, &library);
+    cout << endl;
+    library.printData();
     return 0;
 }
