@@ -10,9 +10,12 @@ class Track{
         string name;
         
         Track(string name, int order);
+        Track(int order, string filePath);
 
         void printData();
-        
+    private:
+        int readFile(string fileName);
+        int readMP3TagFrame(ifstream& f, const string& neededTagID, string* output);
 };
 
 class Album{
@@ -43,6 +46,7 @@ class Artist{
         Artist(string name, string dirPath);
 
         void printData();
+        void displayData();
         int addAlbum(Album newAlbum);
 
     private:
@@ -63,6 +67,7 @@ class Library{
 
         int addToLibrary(Artist newArtist);
         void printData();
+        void displayData();
 
 };
 

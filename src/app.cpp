@@ -13,6 +13,7 @@ void printTree(string searchDir){
         cout << string(i.depth() << 1, ' ') << "|--" << i->path().lexically_relative(searchDir).string() << "\n";   // \u2015 or -- 
         prevDepth = i.depth();
     }
+
 }
 
 
@@ -25,11 +26,9 @@ int directoryToLibrary(string searchDir, Library* library){
         if(!i->is_directory()){
             continue;
         }
-        
-        //cout << i->path().lexically_relative(searchDir).string() << endl;
+    
         Artist newArtist(i->path().lexically_relative(searchDir).string(), i->path().string());
-
-        //newArtist.printData();
+    
         library->addToLibrary(newArtist);
 
     }
@@ -48,7 +47,8 @@ int main(int argc, char *argv[])
     Library library;
     
     directoryToLibrary(searchDir, &library);
-    cout << endl;
-    library.printData();
+    
+    library.displayData();
+
     return 0;
 }
