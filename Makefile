@@ -56,6 +56,7 @@ $(OBJDIR)/%.win.o: $(SRCDIR)/%.cpp
 .PHONY: clean
 clean:
 	@$(RM) $(OBJECTS)
+	@$(RM) $(WINOBJECTS)
 	@echo "Cleanup complete!"
 
 .PHONY: remove
