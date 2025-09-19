@@ -16,6 +16,7 @@ class Track{
     private:
         int readFile(string fileName);
         int readMP3TagFrame(ifstream& f, const string& neededTagID, string* output);
+        int readFLACMetadataBlock(ifstream& f, const string& neededBlockType, string* output);
 };
 
 class Album{

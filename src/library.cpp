@@ -1,5 +1,11 @@
 #include "library.h"
 
+uint UcharArrayToUintLE(const unsigned char bytes[4]){
+    return (uint)((bytes[0]) | ((bytes[1]) << 8) | ((bytes[2]) << 16) | ((bytes[3]) << 24));
+}
+
+
+
 /*
 *   Library Class Functions
 */
@@ -20,15 +26,17 @@ void Library::printData(){
 void Library::displayData(){
     this->printData();
 
-    cout << "Select which artist to display: ";
-    int nr = 0;
-    while (!(cin >> nr) || nr < 1 || nr > (int)artistList.size()) {
-        cout << "Invalid input. Please enter a valid integer: ";
-        cin.clear(); 
-        cin.ignore(numeric_limits<streamsize>::max(), '\n');
+    if(artistList.size() > 0){
+        cout << "Select which artist to display: ";
+        int nr = 0;
+        while (!(cin >> nr) || nr < 1 || nr > (int)artistList.size()) {
+            cout << "Invalid input. Please enter a valid integer: ";
+            cin.clear(); 
+            cin.ignore(numeric_limits<streamsize>::max(), '\n');
+        }
+    
+        artistList[nr-1].displayData();
     }
-
-    artistList[nr-1].displayData();
 }
 
 
@@ -60,14 +68,16 @@ void Artist::printData(){
 void Artist::displayData(){
     this->printData();
 
-    cout << "Select which album to display: ";
-    int nr = 0;
-    while (!(cin >> nr) || nr < 1 || nr > (int)albumList.size()) {
-        cout << "Invalid input. Please enter a valid integer: ";
-        cin.clear(); 
-        cin.ignore(numeric_limits<streamsize>::max(), '\n');
+    if(albumList.size() > 0){
+        cout << "Select which album to display: ";
+        int nr = 0;
+        while (!(cin >> nr) || nr < 1 || nr > (int)albumList.size()) {
+            cout << "Invalid input. Please enter a valid integer: ";
+            cin.clear(); 
+            cin.ignore(numeric_limits<streamsize>::max(), '\n');
+        }
+        albumList[nr-1].printData();
     }
-    albumList[nr-1].printData();
 }
 
 int Artist::addAlbum(Album newAlbum){
@@ -199,35 +209,98 @@ int Track::readMP3TagFrame(ifstream& f, const string& neededTagID, string* outpu
     return 0;
 }
 
-int Track::readFile(string fileName){
-    if(filesystem::path(fileName).extension().string() == ".flac"){
+int Track::readFLACMetadataBlock(ifstream& f, const string& neededBlockType, string* output){
 
-        // .flac audio files are skipped for now
-        this->name = "FLAC files are not yet supported";
+    unsigned char header[4];
+    f.read(reinterpret_cast<char*>(&header), sizeof(char) * 4);
+
+    for(int i = 0; i < 4; i++){
+        printf("%x ", header[i]);
+    }
+    uint blockSize = (header[1] << 16) | (header[2] << 8) | header[3];
+    printf("\n %u",blockSize);
+    
+    if((header[0] & 0x7F) != 4){
+        if(header[0] & 0x80){
+            cout << "FLAC file does not contain title information" << endl;
+            return 1;
+        }
+        f.ignore(blockSize);
+        
+        readFLACMetadataBlock(f, neededBlockType, output);
         return 0;
     }
+
+    unsigned char vendorLen[4];
+    f.read(reinterpret_cast<char*>(&vendorLen), sizeof(char) * 4);
+
+    f.ignore(UcharArrayToUintLE(vendorLen));
+
+    unsigned char vorbisFieldCount[4];
+    f.read(reinterpret_cast<char*>(&vorbisFieldCount), sizeof(char) * 4);
+
+    for(uint i = 0; i < UcharArrayToUintLE(vorbisFieldCount); i++){
+        unsigned char fieldSize[4];
+        f.read(reinterpret_cast<char*>(&fieldSize), sizeof(char) * 4);
+        string field(UcharArrayToUintLE(fieldSize), '\0');
+
+        f.read(&field[0], UcharArrayToUintLE(fieldSize));
+
+        if(field.find(neededBlockType + "=") == 0){
+            *output = field.substr(field.find("=") + 1);
+            break;
+        }
+    }
+    return 0;
+
+}
+
+int Track::readFile(string fileName){
 
     ifstream f(fileName, ios::binary);
     if(!f.is_open()){
         return 1;
     }
 
-    char tagHeader[3];
-
-    f.read(reinterpret_cast<char*>(&tagHeader), sizeof(char) * 3);
-
-    if(tagHeader[0] != 0x49 && tagHeader[1] != 0x44 && tagHeader[2] != 0x33){
-        cout << "\n not ID3 : " << fileName << endl;
-        f.close();
-        return 1;
-    }
-    f.seekg(10);
-
     string title = "";
-    if(readMP3TagFrame(f, "TIT2", &title)){
-        //throw error
+
+    if(filesystem::path(fileName).extension().string() == ".flac"){
+        char tagHeader[4];
+
+        f.read(reinterpret_cast<char*>(&tagHeader), sizeof(char) * 4);
+
+        if(tagHeader[0] != 0x66 && tagHeader[1] != 0x4c && tagHeader[2] != 0x61 && tagHeader[3] != 0x43){
+            cout << "\n Not flac : " << fileName << endl;
+            f.close();
+            return 1;
+        }
+        f.seekg(4);
+
+        if(readFLACMetadataBlock(f, "TITLE", &title)){
+            //throw error
+        }
+
+    }else if(filesystem::path(fileName).extension().string() == ".mp3"){
+        char tagHeader[3];
+
+        f.read(reinterpret_cast<char*>(&tagHeader), sizeof(char) * 3);
+
+        if(tagHeader[0] != 0x49 && tagHeader[1] != 0x44 && tagHeader[2] != 0x33){
+            cout << "\n Not ID3 : " << fileName << endl;
+            f.close();
+            return 1;
+        }
+        f.seekg(10);
+
+        if(readMP3TagFrame(f, "TIT2", &title)){
+            //throw error
+        }
+    }else{
+        this->name = filesystem::path(fileName).extension().string() + " file format is not supported";
+        f.close();
+        return 0;
     }
-    
+
     this->name = title;
 
     f.close();
