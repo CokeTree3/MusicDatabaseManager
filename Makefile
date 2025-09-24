@@ -22,7 +22,6 @@ CXXFLAGS   := -std=c++17 \
 
 WINCXX	   := x86_64-w64-mingw32-c++
 WINCXXFLAGS:= -static
-
 LD         := c++ -o
 LDFLAGS    := -Wall -pedantic
 

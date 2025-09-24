@@ -1,7 +1,9 @@
 #ifndef LIBRARY_H
 #define LIBRARY_H
 #include "sys_headers.h"
+#include <nlohmann/json.hpp>
 
+using json = nlohmann::json;
 using namespace std;
 
 class Track{
@@ -13,6 +15,7 @@ class Track{
         Track(int order, string filePath);
 
         void printData();
+        json getJsonStructure();
     private:
         int readFile(string fileName);
         int readMP3TagFrame(ifstream& f, const string& neededTagID, string* output);
@@ -32,6 +35,7 @@ class Album{
         void printData();
         void printTracks();
         int addTrack(Track newTrack);
+        json getJsonStructure();
     private:
         int directoryToTracks(string path);
 };
@@ -49,6 +53,8 @@ class Artist{
         void printData();
         void displayData();
         int addAlbum(Album newAlbum);
+        json getJsonStructure();
+        
 
     private:
 
@@ -65,7 +71,7 @@ class Library{
         Library(){
             //Artists = new vector<Artist>();
         }
-
+        void jsonBuild();
         int addToLibrary(Artist newArtist);
         void printData();
         void displayData();

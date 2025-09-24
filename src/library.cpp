@@ -1,5 +1,6 @@
 #include "library.h"
 
+
 uint UcharArrayToUintLE(const unsigned char bytes[4]){
     return (uint)((bytes[0]) | ((bytes[1]) << 8) | ((bytes[2]) << 16) | ((bytes[3]) << 24));
 }
@@ -9,12 +10,27 @@ uint UcharArrayToUintLE(const unsigned char bytes[4]){
 /*
 *   Library Class Functions
 */
+void Library::jsonBuild(){
+    ofstream s("library.json");
+    json lib;
+    lib["ArtistCount"] = artistList.size();
+    lib["Artists"] = json::array({});
+    for(Artist entry : artistList){
+        lib["Artists"].push_back(entry.getJsonStructure());
+    }
+
+    s << setw(4) << lib;
+    s.close();
+    return;
+}
+
 int Library::addToLibrary(Artist newArtist){
     artistList.push_back(newArtist);
     return artistList.size();
 }
 
 void Library::printData(){
+    jsonBuild();
     cout << "Artists in the database: \n";
     int count = 1;
     for(Artist entry : artistList){
@@ -80,6 +96,19 @@ void Artist::displayData(){
     }
 }
 
+json Artist::getJsonStructure(){
+    json data;
+    data["1Name"] = this->name;
+    data["AlbumCount"] = this->albumCount;
+    data["Albums"] = json::array({});
+
+    for(Album entry : albumList){
+        data["Albums"].push_back(entry.getJsonStructure());
+    }
+
+    return data;
+}
+
 int Artist::addAlbum(Album newAlbum){
     albumList.push_back(newAlbum);
     return albumList.size();
@@ -133,6 +162,19 @@ void Album::printTracks(){
     }
 }
 
+json Album::getJsonStructure(){
+    json data;
+    data["1Name"] = this->name;
+    data["TrackCount"] = this->trackCount;
+    data["Tracks"] = json::array({});
+
+    for(Track entry : trackList){
+        data["Tracks"].push_back(entry.getJsonStructure());
+    }
+
+    return data;
+}
+
 int Album::addTrack(Track newTrack){
     trackList.push_back(newTrack);
     return trackList.size();
@@ -180,6 +222,24 @@ Track::Track(int order, string filePath){
     readFile(filePath);
 }
 
+json Track::getJsonStructure(){
+    json data;
+    try{
+        if((unsigned char)this->name[0] == 0xff){
+            cout << "QWQWQWQWQW " << name << order << endl;
+        }else{
+            data["1Name"] = this->name;
+        }
+        //data["1Name"] = this->name;
+    }catch(...){
+        cout << this->name << "BADBAD" << endl;
+    }
+    
+    data["1Order"] = this->order;
+
+    return data;
+}
+
 int Track::readMP3TagFrame(ifstream& f, const string& neededTagID, string* output){
     string tagID(4, '\0');
     f.read(&tagID[0], 4);
@@ -214,11 +274,11 @@ int Track::readFLACMetadataBlock(ifstream& f, const string& neededBlockType, str
     unsigned char header[4];
     f.read(reinterpret_cast<char*>(&header), sizeof(char) * 4);
 
-    for(int i = 0; i < 4; i++){
+    /*for(int i = 0; i < 4; i++){
         printf("%x ", header[i]);
-    }
+    }*/
     uint blockSize = (header[1] << 16) | (header[2] << 8) | header[3];
-    printf("\n %u",blockSize);
+    //printf("\n %u",blockSize);
     
     if((header[0] & 0x7F) != 4){
         if(header[0] & 0x80){
@@ -301,6 +361,7 @@ int Track::readFile(string fileName){
         return 0;
     }
 
+    title = title.substr(0, title.find_last_not_of("\0"));
     this->name = title;
 
     f.close();
