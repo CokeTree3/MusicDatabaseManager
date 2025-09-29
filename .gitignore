@@ -1,3 +1,14 @@
+
+# Temporary files 
 *.o
 **/bin
 **/obj
+
+# QMake generated files
+.qmake*
+bintest_plugin_import.cpp
+Makefile*
+
+# Clangd support files for C/C++ completion plugin
+.clang*
+compile_commands.json
