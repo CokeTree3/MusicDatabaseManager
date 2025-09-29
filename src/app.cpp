@@ -1,5 +1,4 @@
-#include "sys_headers.h"
-#include "library.h"
+#include "app.h"
 
 
 void printTree(string searchDir){
@@ -39,6 +38,9 @@ int directoryToLibrary(string searchDir, Library* library){
 
 int main(int argc, char *argv[])
 {
+
+    QApplication app(argc, argv);
+
     string searchDir = filesystem::current_path().string();
     if(argc > 1 && filesystem::exists(argv[1])){
         searchDir = argv[1];
@@ -47,8 +49,12 @@ int main(int argc, char *argv[])
     Library library;
     
     directoryToLibrary(searchDir, &library);
-    
-    library.displayData();
 
-    return 0;
+    WindowGUI win;
+    win.show();
+    cout << qVersion() << endl;
+
+    //library.displayData();
+
+    return app.exec();
 }

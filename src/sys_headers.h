@@ -8,7 +8,8 @@
 #include <vector>
 #include <cstdlib>
 #include <fstream>
-
+#include <QWidget>
+#include <QApplication>
 
 //
 // Windows compilation fixes
