@@ -9,6 +9,7 @@ using namespace std;
 class Track{
     public:
         int order;
+        int orderInAlbum;
         string name;
         
         Track(string name, int order);
@@ -26,16 +27,17 @@ class Album{
     public:
         string name;
         string coverPath;
-        int trackCount;
-        vector<Track> trackList;
+        size_t trackCount;
+        vector<unique_ptr<Track>> trackList;
 
         Album(string name);
         Album(string name, string dirPath);
 
         void printData();
         void printTracks();
-        int addTrack(Track newTrack);
+        int addTrack(int order, string filePath);
         json getJsonStructure();
+
     private:
         int directoryToTracks(string path);
 };
@@ -43,16 +45,16 @@ class Album{
 
 class Artist{
     public:
-        int albumCount;
+        size_t albumCount = 0;
         string name;
-        vector<Album> albumList;
+        vector<unique_ptr<Album>> albumList;
         
         Artist(string name);
         Artist(string name, string dirPath);
 
         void printData();
         void displayData();
-        int addAlbum(Album newAlbum);
+        int addAlbum(string name, string dirPath);
         json getJsonStructure();
         
 
@@ -66,13 +68,15 @@ class Artist{
 
 class Library{
     public:
-        vector<Artist> artistList;
+        vector<unique_ptr<Artist>> artistList;
 
         Library(){
             //Artists = new vector<Artist>();
         }
         void jsonBuild();
-        int addToLibrary(Artist newArtist);
+        int addToLibrary(string name, string dirPath);
+        int buildLibrary(string searchDir);
+
         void printData();
         void displayData();
 

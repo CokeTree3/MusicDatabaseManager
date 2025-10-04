@@ -1,4 +1,6 @@
 #include "app.h"
+#include "library.h"
+#include "qobject.h"
 
 
 void printTree(string searchDir){
@@ -16,26 +18,6 @@ void printTree(string searchDir){
 }
 
 
-int directoryToLibrary(string searchDir, Library* library){
-    if(searchDir == "" || library == nullptr){
-        return 1;
-    }
-
-    for (auto i = filesystem::directory_iterator(searchDir); i != filesystem::directory_iterator(); ++i){
-        if(!i->is_directory()){
-            continue;
-        }
-    
-        Artist newArtist(i->path().lexically_relative(searchDir).string(), i->path().string());
-    
-        library->addToLibrary(newArtist);
-
-    }
-
-    return 0;
-}
-
-
 int main(int argc, char *argv[])
 {
 
@@ -47,13 +29,13 @@ int main(int argc, char *argv[])
     }
 
     Library library;
-    
-    directoryToLibrary(searchDir, &library);
+    library.buildLibrary(searchDir);
 
     WindowGUI win;
+    win.setmainWindowContent(&library);
     win.show();
     cout << qVersion() << endl;
-
+    
     //library.displayData();
 
     return app.exec();

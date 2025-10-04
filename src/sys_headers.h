@@ -15,7 +15,7 @@
 // Windows compilation fixes
 //
 #ifndef uint                
-#define uint unsigned int
+//#define uint unsigned int
 #endif
 
 using namespace std;

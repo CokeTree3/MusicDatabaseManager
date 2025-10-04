@@ -10,13 +10,32 @@ uint UcharArrayToUintLE(const unsigned char bytes[4]){
 /*
 *   Library Class Functions
 */
+int Library::buildLibrary(string searchDir){
+    if(searchDir == ""){
+        return 1;
+    }
+    int count = 1;
+    for (auto i = filesystem::directory_iterator(searchDir); i != filesystem::directory_iterator(); ++i){
+        if(!i->is_directory()){
+            continue;
+        }
+
+        this->addToLibrary(i->path().lexically_relative(searchDir).string(), i->path().string());
+
+        count++;
+    }
+
+    return 0;
+}
+
 void Library::jsonBuild(){
     ofstream s("library.json");
     json lib;
-    lib["ArtistCount"] = artistList.size();
+    size_t count = artistList.size();
+    lib["ArtistCount"] = count;
     lib["Artists"] = json::array({});
-    for(Artist entry : artistList){
-        lib["Artists"].push_back(entry.getJsonStructure());
+    for(size_t i = 0; i < count; i++){
+        lib["Artists"].push_back(artistList[i]->getJsonStructure());
     }
 
     s << setw(4) << lib;
@@ -24,8 +43,8 @@ void Library::jsonBuild(){
     return;
 }
 
-int Library::addToLibrary(Artist newArtist){
-    artistList.push_back(newArtist);
+int Library::addToLibrary(string name, string dirPath){
+    artistList.push_back(make_unique<Artist>(name, dirPath));
     return artistList.size();
 }
 
@@ -33,8 +52,8 @@ void Library::printData(){
     jsonBuild();
     cout << "Artists in the database: \n";
     int count = 1;
-    for(Artist entry : artistList){
-        cout << count << ".  " << entry.name << endl;
+    for(size_t i = 0; i < artistList.size(); i++){
+        cout << count << ".  " << artistList[i]->name << endl;
         count++;
     }
 }
@@ -51,7 +70,7 @@ void Library::displayData(){
             cin.ignore(numeric_limits<streamsize>::max(), '\n');
         }
     
-        artistList[nr-1].displayData();
+        artistList[nr-1]->displayData();
     }
 }
 
@@ -76,8 +95,8 @@ Artist::Artist(string name, string dirPath){
 
 void Artist::printData(){
     cout << name << " albums - \n";
-    for(int i = 0; i < albumCount; i++){
-        cout << i + 1 << ". " << albumList[i].name << endl;
+    for(size_t i = 0; i < albumCount; i++){
+        cout << i + 1 << ". " << albumList[i]->name << endl;
     }
 }
 
@@ -92,7 +111,7 @@ void Artist::displayData(){
             cin.clear(); 
             cin.ignore(numeric_limits<streamsize>::max(), '\n');
         }
-        albumList[nr-1].printData();
+        albumList[nr-1]->printData();
     }
 }
 
@@ -102,16 +121,16 @@ json Artist::getJsonStructure(){
     data["AlbumCount"] = this->albumCount;
     data["Albums"] = json::array({});
 
-    for(Album entry : albumList){
-        data["Albums"].push_back(entry.getJsonStructure());
+    for(size_t i = 0; i < albumCount; i++){
+        data["Albums"].push_back(albumList[i]->getJsonStructure());
     }
 
     return data;
 }
 
-int Artist::addAlbum(Album newAlbum){
-    albumList.push_back(newAlbum);
-    return albumList.size();
+int Artist::addAlbum(string name, string dirPath){
+    albumList.push_back(make_unique<Album>(name, dirPath));
+    return albumCount + 1;
 }
 
 int Artist::directoryToAlbums(string path){
@@ -124,8 +143,7 @@ int Artist::directoryToAlbums(string path){
             continue;
         }
         
-        Album newAlbum(i->path().lexically_relative(path).string(), i->path().string());
-        addAlbum(newAlbum);
+        addAlbum(i->path().lexically_relative(path).string(), i->path().string());
     }
     return 0;
 }
@@ -137,17 +155,25 @@ int Artist::directoryToAlbums(string path){
 */
 Album::Album(string name){
     this->name = name;
-    coverPath = "";
+    this->coverPath = filesystem::current_path().string() + "/assets/missingCov.jpg";
     trackCount = 0;
 }
 
 Album::Album(string name, string dirPath){
     this->name = name;
-    this->coverPath = "";
+    this->coverPath = filesystem::current_path().string() + "/assets/missingCov.jpg";
     if(directoryToTracks(dirPath)){
         //throw error
     }
     trackCount = trackList.size();
+
+    if(filesystem::exists(filesystem::path(dirPath + "/cover.jpg"))){
+        coverPath = dirPath + "/cover.jpg";
+    }
+    else if(filesystem::exists(filesystem::path(dirPath + "/cover.png"))){
+        coverPath = dirPath + "/cover.png";
+    }
+
 }
 
 
@@ -157,8 +183,8 @@ void Album::printData(){
 }
 
 void Album::printTracks(){
-    for(int i = 0; (size_t)i < trackList.size(); i++){
-        cout << i+1 << ". " << trackList[i].name << endl;
+    for(size_t i = 0; (size_t)i < trackList.size(); i++){
+        cout << i+1 << ". " << trackList[i]->name << endl;
     }
 }
 
@@ -168,15 +194,15 @@ json Album::getJsonStructure(){
     data["TrackCount"] = this->trackCount;
     data["Tracks"] = json::array({});
 
-    for(Track entry : trackList){
-        data["Tracks"].push_back(entry.getJsonStructure());
+    for(size_t i = 0; i < trackCount; i++){
+        data["Tracks"].push_back(trackList[i]->getJsonStructure());
     }
 
     return data;
 }
 
-int Album::addTrack(Track newTrack){
-    trackList.push_back(newTrack);
+int Album::addTrack(int order, string filePath){
+    trackList.push_back(make_unique<Track>(order, filePath));
     return trackList.size();
 }
 
@@ -198,12 +224,14 @@ int Album::directoryToTracks(string path){
             this->coverPath = i->path().string();
             continue;
         }
-
-        Track newTrack(trackOrder, i->path().string());
-
-        addTrack(newTrack);
+        
+        addTrack(trackOrder, i->path().string());
         trackOrder++;
     }
+
+    sort(trackList.begin(), trackList.end(), [](const unique_ptr<Track> &a, const unique_ptr<Track> &b) {
+                  return a->orderInAlbum < b->orderInAlbum;
+              });
     return 0;
 }
 
@@ -215,6 +243,7 @@ int Album::directoryToTracks(string path){
 Track::Track(string name, int order){
     this->name = name;
     this->order = order;
+    this->orderInAlbum = order;
 }
 
 Track::Track(int order, string filePath){
@@ -259,7 +288,7 @@ int Track::readMP3TagFrame(ifstream& f, const string& neededTagID, string* outpu
         readMP3TagFrame(f, neededTagID, output);
         return 0;
     }
-    frameSize--;
+    
     
     f.ignore(3);
     output->resize(frameSize);
@@ -302,7 +331,7 @@ int Track::readFLACMetadataBlock(ifstream& f, const string& neededBlockType, str
     for(uint i = 0; i < UcharArrayToUintLE(vorbisFieldCount); i++){
         unsigned char fieldSize[4];
         f.read(reinterpret_cast<char*>(&fieldSize), sizeof(char) * 4);
-        string field(UcharArrayToUintLE(fieldSize), '\0');
+        string field(UcharArrayToUintLE(fieldSize)+1, '\0');
 
         f.read(&field[0], UcharArrayToUintLE(fieldSize));
 
@@ -323,6 +352,7 @@ int Track::readFile(string fileName){
     }
 
     string title = "";
+    string ord = "";
 
     if(filesystem::path(fileName).extension().string() == ".flac"){
         char tagHeader[4];
@@ -337,6 +367,11 @@ int Track::readFile(string fileName){
         f.seekg(4);
 
         if(readFLACMetadataBlock(f, "TITLE", &title)){
+            //throw error
+        }
+        f.seekg(4);
+
+        if(readFLACMetadataBlock(f, "TRACKNUMBER", &ord)){
             //throw error
         }
 
@@ -355,8 +390,15 @@ int Track::readFile(string fileName){
         if(readMP3TagFrame(f, "TIT2", &title)){
             //throw error
         }
+        f.seekg(10);
+        
+        if(readMP3TagFrame(f, "TRCK", &ord)){
+            cout << "Error\n";
+        }
     }else{
         this->name = filesystem::path(fileName).extension().string() + " file format is not supported";
+        this->order = 0;
+        this->orderInAlbum = 0;
         f.close();
         return 0;
     }
@@ -364,6 +406,14 @@ int Track::readFile(string fileName){
     title = title.substr(0, title.find_last_not_of("\0"));
     this->name = title;
 
+    ord = ord.substr(0, ord.find_last_not_of("\0"));
+    ord = ord.substr(0, ord.find("/"));
+
+    try {
+        this->orderInAlbum = stoi(ord);
+    } catch (int e) {
+        this->orderInAlbum = 0;
+    }
     f.close();
     return 0;
 }
