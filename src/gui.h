@@ -1,9 +1,4 @@
 
-#include "qboxlayout.h"
-#include "qobject.h"
-#include "qpushbutton.h"
-#include "qscrollarea.h"
-#include "qwidget.h"
 #include "sys_headers.h"
 #include "library.h"
 #include <QPushButton>
@@ -20,7 +15,9 @@
 #include <QScrollArea>
 #include <QPixmap>
 #include <QMouseEvent>
-#include <memory>
+#include <QFileDialog>
+
+
 
 
 
@@ -31,16 +28,18 @@ class WindowGUI : public QMainWindow  {
     public:
         WindowGUI(QWidget *parent = nullptr);
 
-        void setmainWindowContent(Library* library);
-        
+        void setMainWindowContent();
+        void setMainWindowContent(Library* library);
+        void setLocalLibrary(Library* library);
         
 
     private:
         QWidget* mainBox;
-        QScrollArea* mainScrollArea;
+        Library* localLibrary;
 
         void PrintText();
         void ChangeLblText(string text);
+        void showDirSelect();
 };
 
 
@@ -52,16 +51,26 @@ class AlbumDropdown : public QWidget {
         AlbumDropdown(unique_ptr<Album>& album, QWidget *parent = nullptr);
 
     signals:
-        void clicked();
+        void leftClicked();
+        void rightClicked();
 
     public slots:
-        void onClick();
+        void onLeftClick();
+        void onRightClick();
 
 
     protected:
         void mousePressEvent(QMouseEvent* event) override {
             if(event->button() == Qt::LeftButton){
-                emit clicked();
+                if(layout() && layout()->count() > 0){
+                    QWidget* titleBar = layout()->itemAt(0)->widget();
+                    QWidget* clickedWidget = childAt(event->pos());
+                    if((titleBar == clickedWidget || titleBar->isAncestorOf(clickedWidget))){
+                        emit leftClicked();
+                    }
+                }
+            }else if(event->button() == Qt::RightButton){
+                emit rightClicked();
             }
             QWidget::mousePressEvent(event);
         }

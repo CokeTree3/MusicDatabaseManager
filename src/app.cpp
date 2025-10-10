@@ -23,16 +23,23 @@ int main(int argc, char *argv[])
 
     QApplication app(argc, argv);
 
-    string searchDir = filesystem::current_path().string();
+    WindowGUI win;
+    Library library;
+
+    win.setLocalLibrary(&library);
     if(argc > 1 && filesystem::exists(argv[1])){
-        searchDir = argv[1];
+        library.buildLibrary(argv[1]);
+        win.setMainWindowContent(&library);
+    }else{
+        if(library.jsonRead()){
+            cout << "Lib loading not done\n";
+            
+        }else{
+            win.setMainWindowContent(&library);
+        }
     }
 
-    Library library;
-    library.buildLibrary(searchDir);
 
-    WindowGUI win;
-    win.setmainWindowContent(&library);
     win.show();
     cout << qVersion() << endl;
     

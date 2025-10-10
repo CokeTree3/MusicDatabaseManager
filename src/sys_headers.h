@@ -7,6 +7,7 @@
 #include <list>
 #include <vector>
 #include <cstdlib>
+#include <unistd.h>
 #include <fstream>
 #include <QWidget>
 #include <QApplication>

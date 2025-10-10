@@ -11,6 +11,7 @@ class Track{
         int order;
         int orderInAlbum;
         string name;
+        string path;
         
         Track(string name, int order);
         Track(int order, string filePath);
@@ -69,13 +70,18 @@ class Artist{
 class Library{
     public:
         vector<unique_ptr<Artist>> artistList;
+        json libJson;
+        string libPath;
 
         Library(){
             //Artists = new vector<Artist>();
         }
         void jsonBuild();
         int addToLibrary(string name, string dirPath);
+        void resetLibrary();
         int buildLibrary(string searchDir);
+
+        int jsonRead();
 
         void printData();
         void displayData();

@@ -1,4 +1,6 @@
 #include "library.h"
+#include <cstddef>
+#include <fstream>
 
 
 uint UcharArrayToUintLE(const unsigned char bytes[4]){
@@ -14,6 +16,7 @@ int Library::buildLibrary(string searchDir){
     if(searchDir == ""){
         return 1;
     }
+    libPath = searchDir;
     int count = 1;
     for (auto i = filesystem::directory_iterator(searchDir); i != filesystem::directory_iterator(); ++i){
         if(!i->is_directory()){
@@ -24,28 +27,60 @@ int Library::buildLibrary(string searchDir){
 
         count++;
     }
-
+    jsonBuild();
     return 0;
 }
 
 void Library::jsonBuild(){
     ofstream s("library.json");
-    json lib;
+
     size_t count = artistList.size();
-    lib["ArtistCount"] = count;
-    lib["Artists"] = json::array({});
+    libJson["LibraryPath"] = libPath;
+    libJson["ArtistCount"] = count;
+    libJson["Artists"] = json::array({});
     for(size_t i = 0; i < count; i++){
-        lib["Artists"].push_back(artistList[i]->getJsonStructure());
+        libJson["Artists"].push_back(artistList[i]->getJsonStructure());
     }
 
-    s << setw(4) << lib;
+    s << setw(4) << libJson;
     s.close();
+
     return;
 }
+
+int Library::jsonRead(){
+    string libFile = "library.json";
+
+    if(access( libFile.c_str(), F_OK ) != -1){
+        ifstream f(libFile);
+        json data = json::parse(f);
+        f.close();
+        buildLibrary(data["LibraryPath"]);
+
+        return 0;
+
+    }else{
+        cout << "Creating a new Library JSON file\n";
+        ofstream of(libFile);
+        libJson["LibraryPath"] = libPath;
+        of << setw(4) << libJson;
+        of.close();
+        return 1;
+    }
+
+    
+    
+}
+
 
 int Library::addToLibrary(string name, string dirPath){
     artistList.push_back(make_unique<Artist>(name, dirPath));
     return artistList.size();
+}
+
+void Library::resetLibrary(){
+    artistList.clear();
+    libJson.clear();
 }
 
 void Library::printData(){
@@ -224,9 +259,10 @@ int Album::directoryToTracks(string path){
             this->coverPath = i->path().string();
             continue;
         }
-        
-        addTrack(trackOrder, i->path().string());
-        trackOrder++;
+        if(fType == ".mp3" || fType == ".flac"){
+            addTrack(trackOrder, i->path().string());
+            trackOrder++;
+        }
     }
 
     sort(trackList.begin(), trackList.end(), [](const unique_ptr<Track> &a, const unique_ptr<Track> &b) {
@@ -248,7 +284,10 @@ Track::Track(string name, int order){
 
 Track::Track(int order, string filePath){
     this->order = order;
-    readFile(filePath);
+    if(readFile(filePath)){
+        
+    }
+    this->path = filePath;
 }
 
 json Track::getJsonStructure(){
@@ -264,7 +303,7 @@ json Track::getJsonStructure(){
         cout << this->name << "BADBAD" << endl;
     }
     
-    data["1Order"] = this->order;
+    data["1Order"] = this->orderInAlbum;
 
     return data;
 }
@@ -404,6 +443,9 @@ int Track::readFile(string fileName){
     }
 
     title = title.substr(0, title.find_last_not_of("\0"));
+    if(title.rbegin()[0] == '\0'){
+        title.pop_back();
+    }
     this->name = title;
 
     ord = ord.substr(0, ord.find_last_not_of("\0"));
