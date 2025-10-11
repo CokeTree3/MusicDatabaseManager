@@ -1,6 +1,8 @@
 #include "library.h"
 #include <cstddef>
+#include <cstdint>
 #include <fstream>
+#include <vector>
 
 
 uint UcharArrayToUintLE(const unsigned char bytes[4]){
@@ -27,7 +29,8 @@ int Library::buildLibrary(string searchDir){
 
         count++;
     }
-    jsonBuild();
+
+    //jsonBuild();
     return 0;
 }
 
@@ -67,14 +70,66 @@ int Library::jsonRead(){
         of.close();
         return 1;
     }
+    
+}
 
-    
-    
+int Library::buildFromJson(json jsonSource){
+    if(!jsonSource.contains("Artists")) return 1;
+    this->libJson = jsonSource;
+    this->libPath = "";
+    for(size_t i = 0; i < jsonSource["Artists"].size(); i++){
+        this->addToLibrary(jsonSource["Artists"][i]);
+    }
+
+
+    return 0;
+}
+
+int Library::find_diff(Library* remoteLib, json* jsonDiff){
+    (*jsonDiff)["Artists"] = json::array({});
+    vector<bool> markList(remoteLib->artistList.size(), false);
+    for(size_t i = 0; i < this->artistList.size(); i++){
+        bool found = false;
+        json artistDiff;
+        for(size_t j = 0; j < remoteLib->artistList.size(); j++){
+            if(this->artistList[i]->equals(remoteLib->artistList[j], &artistDiff) && !markList[j]){
+                markList[j] = true;
+                found = true;
+                break;
+            }
+        }
+        if(!found){
+            (*jsonDiff)["Artists"].push_back(this->artistList[i]->getJsonStructure());
+
+        }
+        else if(found && !artistDiff.is_null()){
+            (*jsonDiff)["Artists"].push_back(artistDiff);
+        }
+    }
+    for(size_t i = 0; i < markList.size(); i++){
+        if(!markList[i]){
+            json artistToRemove;
+            artistToRemove["1Name"] = remoteLib->artistList[i]->name;
+            artistToRemove["Remove"] = true;
+            artistToRemove["Albums"] = json::array({});
+
+            (*jsonDiff)["Artists"].push_back(artistToRemove);
+        }
+    }
+
+
+    return 0;
 }
 
 
 int Library::addToLibrary(string name, string dirPath){
     artistList.push_back(make_unique<Artist>(name, dirPath));
+    return artistList.size();
+}
+
+int Library::addToLibrary(json jsonSource){
+
+    artistList.push_back(make_unique<Artist>(jsonSource));
     return artistList.size();
 }
 
@@ -127,6 +182,16 @@ Artist::Artist(string name, string dirPath){
     albumCount = albumList.size();
 }
 
+Artist::Artist(json jsonSource){
+    this->name = jsonSource["1Name"];
+    
+    for(size_t i = 0; i < jsonSource["Albums"].size(); i++){
+        this->addAlbum(jsonSource["Albums"][i]);
+    }
+
+    this->albumCount = this->albumList.size();
+}
+
 
 void Artist::printData(){
     cout << name << " albums - \n";
@@ -150,6 +215,55 @@ void Artist::displayData(){
     }
 }
 
+bool Artist::equals(unique_ptr<Artist>& rhs, json* jsonDiff){
+    if(this->name == rhs->name){
+        bool init = false;
+        vector<bool> markList(rhs->albumList.size(), false);
+        for(size_t i = 0; i < this->albumList.size(); i++){
+            bool found = false;
+            json albumDiff;
+            for(size_t j = 0; j < rhs->albumList.size(); j++){
+                if(this->albumList[i]->equals(rhs->albumList[j], &albumDiff) && !markList[j]){
+                    markList[j] = true;
+                    found = true;
+                    break;
+                }
+            }
+            if(!found){
+                if(!init){
+                    init = true;
+                    (*jsonDiff) = this->getEmptyJsonStructure();
+                }
+                (*jsonDiff)["Albums"].push_back(this->albumList[i]->getJsonStructure());
+                
+            }
+            else if(found && !albumDiff.is_null()){
+                if(!init){
+                    init = true;
+                    (*jsonDiff) = this->getEmptyJsonStructure();
+                }
+                (*jsonDiff)["Albums"].push_back(albumDiff);
+            }
+        }
+        for(size_t i = 0; i < markList.size(); i++){
+            if(!markList[i]){
+                if(!init){
+                    init = true;
+                    (*jsonDiff) = this->getEmptyJsonStructure();
+                }
+                json albumToRemove = rhs->albumList[i]->getEmptyJsonStructure();
+                albumToRemove["Remove"] = true;
+
+
+                (*jsonDiff)["Albums"].push_back(albumToRemove);
+
+            }
+        }
+        return true;
+    }
+    return false;
+}
+
 json Artist::getJsonStructure(){
     json data;
     data["1Name"] = this->name;
@@ -163,8 +277,21 @@ json Artist::getJsonStructure(){
     return data;
 }
 
+json Artist::getEmptyJsonStructure(){
+    json data;
+    data["1Name"] = this->name;
+    data["Albums"] = json::array({});
+    
+    return data;
+}
+
 int Artist::addAlbum(string name, string dirPath){
     albumList.push_back(make_unique<Album>(name, dirPath));
+    return albumCount + 1;
+}
+
+int Artist::addAlbum(json jsonSource){
+    albumList.push_back(make_unique<Album>(jsonSource));
     return albumCount + 1;
 }
 
@@ -211,6 +338,57 @@ Album::Album(string name, string dirPath){
 
 }
 
+Album::Album(json jsonSource){
+    this->name = jsonSource["1Name"];
+    for(size_t i = 0; i < jsonSource["Tracks"].size(); i++){
+        addTrack(jsonSource["Tracks"][i]);
+    }
+    this->coverPath = "";
+    this->trackCount = this->trackList.size();
+}
+
+bool Album::equals(unique_ptr<Album>& rhs, json* jsonDiff){
+    if(this->name == rhs->name){
+
+        bool init = false;
+        vector<bool> markList(rhs->trackList.size(), false);
+        for(size_t i = 0; i < this->trackList.size(); i++){
+            bool found = false;
+            json trackDiff;
+            for(size_t j = 0; j < rhs->trackList.size(); j++){
+                if(this->trackList[i]->equals(rhs->trackList[j]) && !markList[j]){
+                    markList[j] = true;
+                    found = true;
+                    break;
+                }
+            }
+            if(!found){
+                if(!init){
+                    init = true;
+                    (*jsonDiff) = this->getEmptyJsonStructure();
+                }
+                (*jsonDiff)["Tracks"].push_back(this->trackList[i]->getJsonStructure());
+            }
+        }
+        for(size_t i = 0; i < markList.size(); i++){
+            if(!markList[i]){
+                if(!init){
+                    init = true;
+                    (*jsonDiff) = this->getEmptyJsonStructure();
+                }
+                json trackToRemove;
+                trackToRemove["1Name"] = rhs->trackList[i]->name;
+                trackToRemove["Remove"] = true;
+
+                (*jsonDiff)["Tracks"].push_back(trackToRemove);
+
+            }
+        }
+        return true;
+    }
+    return false;
+}
+
 
 void Album::printData(){
     cout << name << " with "<< trackCount << " Tracks: \n";
@@ -236,8 +414,23 @@ json Album::getJsonStructure(){
     return data;
 }
 
+json Album::getEmptyJsonStructure(){
+    json data;
+    data["1Name"] = this->name;
+    data["Tracks"] = json::array({});
+
+    return data;
+}
+
 int Album::addTrack(int order, string filePath){
     trackList.push_back(make_unique<Track>(order, filePath));
+    trackCount++;
+    return trackList.size();
+}
+
+int Album::addTrack(json jsonSource){
+    trackList.push_back(make_unique<Track>(jsonSource));
+    trackCount++;
     return trackList.size();
 }
 
@@ -290,6 +483,19 @@ Track::Track(int order, string filePath){
     this->path = filePath;
 }
 
+Track::Track(json jsonSource){
+    this->name = jsonSource["1Name"];
+    this->orderInAlbum = jsonSource["Order"];
+    this->order = this->orderInAlbum;
+}
+
+bool Track::equals(unique_ptr<Track>& rhs){
+    if(this->name == rhs->name && this->orderInAlbum == rhs->orderInAlbum){
+        return true;
+    }
+    return false;
+}
+
 json Track::getJsonStructure(){
     json data;
     try{
@@ -303,7 +509,7 @@ json Track::getJsonStructure(){
         cout << this->name << "BADBAD" << endl;
     }
     
-    data["1Order"] = this->orderInAlbum;
+    data["Order"] = this->orderInAlbum;
 
     return data;
 }

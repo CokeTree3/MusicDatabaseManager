@@ -15,6 +15,8 @@ class Track{
         
         Track(string name, int order);
         Track(int order, string filePath);
+        Track(json jsonSource);
+        bool equals(unique_ptr<Track>& rhs);
 
         void printData();
         json getJsonStructure();
@@ -33,11 +35,15 @@ class Album{
 
         Album(string name);
         Album(string name, string dirPath);
+        Album(json jsonSource);
+        bool equals(unique_ptr<Album>& rhs, json* jsonDiff);
 
         void printData();
         void printTracks();
         int addTrack(int order, string filePath);
+        int addTrack(json jsonSource);
         json getJsonStructure();
+        json getEmptyJsonStructure();
 
     private:
         int directoryToTracks(string path);
@@ -52,11 +58,16 @@ class Artist{
         
         Artist(string name);
         Artist(string name, string dirPath);
+        Artist(json jsonSource);
+
+        bool equals(unique_ptr<Artist>& rhs, json* jsonDiff);
 
         void printData();
         void displayData();
         int addAlbum(string name, string dirPath);
+        int addAlbum(json jsonSource);
         json getJsonStructure();
+        json getEmptyJsonStructure();
         
 
     private:
@@ -78,10 +89,15 @@ class Library{
         }
         void jsonBuild();
         int addToLibrary(string name, string dirPath);
+        int addToLibrary(json jsonSource);
         void resetLibrary();
         int buildLibrary(string searchDir);
 
+        int buildFromJson(json jsonSource);
+
         int jsonRead();
+
+        int find_diff(Library* remoteLib, json* jsonDiff);
 
         void printData();
         void displayData();
