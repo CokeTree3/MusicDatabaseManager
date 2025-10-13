@@ -1,15 +1,11 @@
 #include "library.h"
-#include <cstddef>
-#include <cstdint>
-#include <fstream>
-#include <vector>
+#include "qfileinfo.h"
+#include <string>
 
 
 uint UcharArrayToUintLE(const unsigned char bytes[4]){
     return (uint)((bytes[0]) | ((bytes[1]) << 8) | ((bytes[2]) << 16) | ((bytes[3]) << 24));
 }
-
-
 
 /*
 *   Library Class Functions
@@ -20,17 +16,31 @@ int Library::buildLibrary(string searchDir){
     }
     libPath = searchDir;
     int count = 1;
+
+    #if defined (PLATFORM_LINUX) || defined (PLATFORM_WINDOWS)
     for (auto i = filesystem::directory_iterator(searchDir); i != filesystem::directory_iterator(); ++i){
         if(!i->is_directory()){
             continue;
         }
-
         this->addToLibrary(i->path().lexically_relative(searchDir).string(), i->path().string());
-
         count++;
     }
+    #endif
 
-    //jsonBuild();
+    #if defined (PLATFORM_ANDROID)
+
+    QDirIterator iter(QString::fromStdString(searchDir), QDir::NoDotAndDotDot | QDir::AllEntries);
+    while(iter.hasNext()){
+        QString path = iter.next();
+        if(!iter.fileInfo().isDir()){
+            continue;
+        }
+        this->addToLibrary(iter.fileName().toStdString(), iter.filePath().toStdString());
+        count++;
+    }
+    #endif
+
+    jsonBuild();
     return 0;
 }
 
@@ -58,8 +68,8 @@ int Library::jsonRead(){
         ifstream f(libFile);
         json data = json::parse(f);
         f.close();
-        buildLibrary(data["LibraryPath"]);
-
+        if(buildLibrary(data["LibraryPath"])) return 1;
+        libSet = true;
         return 0;
 
     }else{
@@ -299,7 +309,7 @@ int Artist::directoryToAlbums(string path){
     if(path == ""){
         return 1;
     }
-
+    #if defined (PLATFORM_LINUX) || defined (PLATFORM_WINDOWS)
     for (auto i = filesystem::directory_iterator(path); i != filesystem::directory_iterator(); ++i){
         if(!i->is_directory()){
             continue;
@@ -307,6 +317,20 @@ int Artist::directoryToAlbums(string path){
         
         addAlbum(i->path().lexically_relative(path).string(), i->path().string());
     }
+    #endif
+
+    #if defined (PLATFORM_ANDROID)
+    
+    QDirIterator iter(QString::fromStdString(path), QDir::NoDotAndDotDot | QDir::AllEntries);
+    while(iter.hasNext()){
+        QString path = iter.next();
+        if(!iter.fileInfo().isDir()){
+            continue;
+        }
+        addAlbum(iter.fileName().toStdString(), iter.filePath().toStdString());
+    }
+
+    #endif
     return 0;
 }
 
@@ -317,17 +341,33 @@ int Artist::directoryToAlbums(string path){
 */
 Album::Album(string name){
     this->name = name;
+
+    #if defined (PLATFORM_LINUX) || defined (PLATFORM_WINDOWS)
     this->coverPath = filesystem::current_path().string() + "/assets/missingCov.jpg";
+    #endif
+
+    #if defined (PLATFORM_ANDROID)                      // TODO add missing cover placeholder icon
+    this->coverPath = "";
+    #endif
     trackCount = 0;
 }
 
 Album::Album(string name, string dirPath){
     this->name = name;
+
+    #if defined (PLATFORM_LINUX) || defined (PLATFORM_WINDOWS)
     this->coverPath = filesystem::current_path().string() + "/assets/missingCov.jpg";
+    #endif
+
+    #if defined (PLATFORM_ANDROID)                      // TODO add missing cover placeholder icon
+    this->coverPath = "";
+    #endif
     if(directoryToTracks(dirPath)){
         //throw error
     }
     trackCount = trackList.size();
+
+    #if defined (PLATFORM_LINUX) || defined (PLATFORM_WINDOWS)
 
     if(filesystem::exists(filesystem::path(dirPath + "/cover.jpg"))){
         coverPath = dirPath + "/cover.jpg";
@@ -335,7 +375,17 @@ Album::Album(string name, string dirPath){
     else if(filesystem::exists(filesystem::path(dirPath + "/cover.png"))){
         coverPath = dirPath + "/cover.png";
     }
+    #endif
 
+    #if defined (PLATFORM_ANDROID)
+
+    if(QFileInfo::exists(QString::fromStdString(dirPath + "/cover.jpg"))){
+        coverPath = dirPath + "/cover.jpg";
+    }
+    else if(QFileInfo::exists(QString::fromStdString(dirPath + "/cover.png"))){
+        coverPath = dirPath + "/cover.png";
+    }
+    #endif
 }
 
 Album::Album(json jsonSource){
@@ -440,7 +490,9 @@ int Album::directoryToTracks(string path){
     }
 
     int trackOrder = 1;
-    
+
+    #if defined (PLATFORM_LINUX) || defined (PLATFORM_WINDOWS)
+
     for (auto i = filesystem::directory_iterator(path); i != filesystem::directory_iterator(); ++i){
         
         if(!i->is_regular_file()){
@@ -457,6 +509,27 @@ int Album::directoryToTracks(string path){
             trackOrder++;
         }
     }
+    #endif
+
+    #if defined (PLATFORM_ANDROID)
+
+    QDirIterator iter(QString::fromStdString(path), QDir::NoDotAndDotDot | QDir::AllEntries);
+    while(iter.hasNext()){
+        QString path = iter.next();
+        if(!iter.fileInfo().isFile()){
+            continue;
+        }
+        QString fType = iter.fileInfo().suffix();
+        if(fType == "jpg" || fType == "png"){
+            this->coverPath = iter.filePath().toStdString();
+            continue;
+        }
+        if(fType == "mp3" || fType == "flac"){
+            addTrack(trackOrder, iter.filePath().toStdString());
+            trackOrder++;
+        }
+    }
+    #endif
 
     sort(trackList.begin(), trackList.end(), [](const unique_ptr<Track> &a, const unique_ptr<Track> &b) {
                   return a->orderInAlbum < b->orderInAlbum;
@@ -514,6 +587,7 @@ json Track::getJsonStructure(){
     return data;
 }
 
+#if defined (PLATFORM_LINUX) || defined (PLATFORM_WINDOWS)
 int Track::readMP3TagFrame(ifstream& f, const string& neededTagID, string* output){
     string tagID(4, '\0');
     f.read(&tagID[0], 4);
@@ -547,12 +621,7 @@ int Track::readFLACMetadataBlock(ifstream& f, const string& neededBlockType, str
 
     unsigned char header[4];
     f.read(reinterpret_cast<char*>(&header), sizeof(char) * 4);
-
-    /*for(int i = 0; i < 4; i++){
-        printf("%x ", header[i]);
-    }*/
     uint blockSize = (header[1] << 16) | (header[2] << 8) | header[3];
-    //printf("\n %u",blockSize);
     
     if((header[0] & 0x7F) != 4){
         if(header[0] & 0x80){
@@ -588,18 +657,94 @@ int Track::readFLACMetadataBlock(ifstream& f, const string& neededBlockType, str
     return 0;
 
 }
+#endif
 
+#if defined (PLATFORM_ANDROID)
+int Track::readMP3TagFrameQt(QFile& f, const string& neededTagID, string* output){
+    string tagID(4, '\0');
+    f.read(&tagID[0], 4);
+
+    uint frameSize;
+    f.read(reinterpret_cast<char*>(&frameSize), sizeof(char) * 4);
+
+    char* pos = (char*) &frameSize;                                             //Reversal of the Bytes after reading to get the correct value of the 'tag_size'
+    for (uint i = 0; i < ((sizeof (uint)) / 2); i++){
+        pos [i] = pos [i] ^ pos [(sizeof (uint)) - i - 1];
+        pos [(sizeof (uint)) - i - 1] = pos [i] ^ pos [(sizeof (uint)) - i - 1];
+        pos [i] = pos [i] ^ pos [(sizeof (uint)) - i - 1];
+    }
+
+    if(tagID != neededTagID){
+        f.skip(2 + frameSize);
+        readMP3TagFrameQt(f, neededTagID, output);
+        return 0;
+    }
+    
+    
+    f.skip(3);
+    output->resize(frameSize);
+
+    f.read(&(*output)[0], frameSize);
+
+    return 0;
+}
+
+int Track::readFLACMetadataBlockQt(QFile& f, const string& neededBlockType, string* output){
+
+    unsigned char header[4];
+    f.read(reinterpret_cast<char*>(&header), sizeof(char) * 4);
+
+    uint blockSize = (header[1] << 16) | (header[2] << 8) | header[3];
+    
+    if((header[0] & 0x7F) != 4){
+        if(header[0] & 0x80){
+            cout << "FLAC file does not contain title information" << endl;
+            return 1;
+        }
+        f.skip(blockSize);
+        
+        readFLACMetadataBlockQt(f, neededBlockType, output);
+        return 0;
+    }
+
+    unsigned char vendorLen[4];
+    f.read(reinterpret_cast<char*>(&vendorLen), sizeof(char) * 4);
+
+    f.skip(UcharArrayToUintLE(vendorLen));
+
+    unsigned char vorbisFieldCount[4];
+    f.read(reinterpret_cast<char*>(&vorbisFieldCount), sizeof(char) * 4);
+
+    for(uint i = 0; i < UcharArrayToUintLE(vorbisFieldCount); i++){
+        unsigned char fieldSize[4];
+        f.read(reinterpret_cast<char*>(&fieldSize), sizeof(char) * 4);
+        string field(UcharArrayToUintLE(fieldSize)+1, '\0');
+
+        f.read(&field[0], UcharArrayToUintLE(fieldSize));
+
+        if(field.find(neededBlockType + "=") == 0){
+            *output = field.substr(field.find("=") + 1);
+            break;
+        }
+    }
+    return 0;
+
+}
+#endif
+
+
+#if defined (PLATFORM_LINUX) || defined (PLATFORM_WINDOWS)
 int Track::readFile(string fileName){
 
     ifstream f(fileName, ios::binary);
     if(!f.is_open()){
         return 1;
     }
-
     string title = "";
     string ord = "";
+    string fType = filesystem::path(fileName).extension().string();
 
-    if(filesystem::path(fileName).extension().string() == ".flac"){
+    if(fType == ".flac"){
         char tagHeader[4];
 
         f.read(reinterpret_cast<char*>(&tagHeader), sizeof(char) * 4);
@@ -620,7 +765,7 @@ int Track::readFile(string fileName){
             //throw error
         }
 
-    }else if(filesystem::path(fileName).extension().string() == ".mp3"){
+    }else if(fType == ".mp3"){
         char tagHeader[3];
 
         f.read(reinterpret_cast<char*>(&tagHeader), sizeof(char) * 3);
@@ -642,6 +787,7 @@ int Track::readFile(string fileName){
         }
     }else{
         this->name = filesystem::path(fileName).extension().string() + " file format is not supported";
+
         this->order = 0;
         this->orderInAlbum = 0;
         f.close();
@@ -665,6 +811,89 @@ int Track::readFile(string fileName){
     f.close();
     return 0;
 }
+#endif
+
+#if defined (PLATFORM_ANDROID)
+
+int Track::readFile(string fileName){
+
+    QFile f(QString::fromStdString(fileName));
+    if(!f.open(QIODevice::ReadOnly)){
+        return 1;
+    }
+
+    string title = "";
+    string ord = "";
+    string fType= "." + QFileInfo(QString::fromStdString(fileName)).suffix().toStdString();
+
+    if(fType == ".flac"){
+        char tagHeader[4];
+
+        f.read(reinterpret_cast<char*>(&tagHeader), sizeof(char) * 4);
+
+        if(tagHeader[0] != 0x66 && tagHeader[1] != 0x4c && tagHeader[2] != 0x61 && tagHeader[3] != 0x43){
+            cout << "\n Not flac : " << fileName << endl;
+            f.close();
+            return 1;
+        }
+        f.seek(4);
+
+        if(readFLACMetadataBlockQt(f, "TITLE", &title)){
+            //throw error
+        }
+        f.seek(4);
+
+        if(readFLACMetadataBlockQt(f, "TRACKNUMBER", &ord)){
+            //throw error
+        }
+
+    }else if(fType == ".mp3"){
+        char tagHeader[3];
+
+        f.read(reinterpret_cast<char*>(&tagHeader), sizeof(char) * 3);
+
+        if(tagHeader[0] != 0x49 && tagHeader[1] != 0x44 && tagHeader[2] != 0x33){
+            cout << "\n Not ID3 : " << fileName << endl;
+            f.close();
+            return 1;
+        }
+        f.seek(10);
+
+        if(readMP3TagFrameQt(f, "TIT2", &title)){
+            //throw error
+        }
+        f.seek(10);
+        
+        if(readMP3TagFrameQt(f, "TRCK", &ord)){
+            cout << "Error\n";
+        }
+    }else{
+        this->name = "." + QFileInfo(QString::fromStdString(fileName)).suffix().toStdString() + " file format is not supported";
+
+        this->order = 0;
+        this->orderInAlbum = 0;
+        f.close();
+        return 0;
+    }
+
+    title = title.substr(0, title.find_last_not_of("\0"));
+    if(title.rbegin()[0] == '\0'){
+        title.pop_back();
+    }
+    this->name = title;
+
+    ord = ord.substr(0, ord.find_last_not_of("\0"));
+    ord = ord.substr(0, ord.find("/"));
+
+    try {
+        this->orderInAlbum = stoi(ord);
+    } catch (int e) {
+        this->orderInAlbum = 0;
+    }
+    f.close();
+    return 0;
+}
+#endif
 
 void Track::printData(){
     cout << "Song " << this->name << ", track nr: "<< this->order << "\n";

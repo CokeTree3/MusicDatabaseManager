@@ -3,7 +3,6 @@
 
 
 #include <iostream>
-#include <filesystem>
 #include <list>
 #include <vector>
 #include <cstdlib>
@@ -12,13 +11,34 @@
 #include <QWidget>
 #include <QApplication>
 
-//
-// Windows compilation fixes
-//
-#ifndef uint                
-//#define uint unsigned int
-#endif
 
 using namespace std;
+
+extern bool libSet;
+extern bool serverMode;
+
+#if defined (__linux__) && !defined (__ANDROID__)
+
+#define PLATFORM_LINUX
+#include <filesystem>
+#include <QDirIterator>
+#include <QFile>
+#include <QFileInfo>
+
+#endif
+
+#if defined (_WIN32)
+
+#define PLATFORM_WINDOWS
+#include <filesystem>
+
+#endif
+
+#if defined (__ANDROID__)
+
+#define PLATFORM_ANDROID
+#include <QDirIterator>
+
+#endif
 
 #endif

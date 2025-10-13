@@ -1,5 +1,6 @@
 
 #include "sys_headers.h"
+#include "networking.h"
 #include "library.h"
 #include <QPushButton>
 #include <QInputDialog>
@@ -40,6 +41,8 @@ class WindowGUI : public QMainWindow  {
         void PrintText();
         void ChangeLblText(string text);
         void showDirSelect();
+        void changeOpMode();
+        void startSyncFunc();
 };
 
 

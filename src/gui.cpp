@@ -1,6 +1,4 @@
 #include "gui.h"
-#include "library.h"
-
 
 void deleteQWidgetFromLayout(QLayout* layout, int indexInLayout){
     QLayoutItem* item = layout->takeAt(indexInLayout);
@@ -25,15 +23,19 @@ WindowGUI::WindowGUI(QWidget* parent) :QMainWindow(parent) {
 
     auto *quit = new QAction("&Quit", this);
     auto *libraryPath = new QAction("&Path to Library", this);
+    auto *opModeSelect = new QAction("&Enable Server mode", this);
+    opModeSelect->setCheckable(true);
     QMenu *fileMenu = menuBar()->addMenu("&File");
-    fileMenu->addAction(quit);
+    
     fileMenu->addAction(libraryPath);
+    fileMenu->addAction(opModeSelect);
+    fileMenu->addAction(quit);
 
     auto *changeText = new QAction("&Update Text", this);
     QMenu *editMenu = menuBar()->addMenu("&Edit");
     editMenu->addAction(changeText);
 
-    QPushButton *btn = new QPushButton("Click Me", this);
+    QPushButton *btn = new QPushButton("Start Sync", this);
     QLabel* noLibraryNotification = new QLabel("No Library found, please set a path to a valid library in File menu!");
     //mainTextBox = new QTextEdit("", mainWindowBox);
     //mainTextBox->setReadOnly(true);
@@ -58,10 +60,37 @@ WindowGUI::WindowGUI(QWidget* parent) :QMainWindow(parent) {
     connect(changeText, &QAction::triggered, this, [this]{WindowGUI::ChangeLblText("Local Library\n\n1. ArtistName1\n\tAlbumName1 (2 Tracks)\n\t\t1. SongName1\n\t\t2. SongName2"); });
     connect(quit, &QAction::triggered, qApp, QApplication::quit);
     connect(libraryPath, &QAction::triggered, this, &WindowGUI::showDirSelect);
+    connect(opModeSelect, &QAction::triggered, this, &WindowGUI::changeOpMode);
+
+    connect(btn, &QPushButton::clicked, this, &WindowGUI::startSyncFunc);
 }
 
 void WindowGUI::ChangeLblText(string text) {
     cout << "edit to " << text << endl;
+}
+
+void WindowGUI::changeOpMode(){
+    if(!libSet){
+        (qobject_cast<QAction*>(sender()))->setChecked(false);
+        QMessageBox::warning( this, tr("Error"), tr("Please set the local library path first!"));
+        return;
+    }
+    if(serverMode){
+        //change to client mode
+        cout << "to client mode\n";
+        QPushButton* btn = qobject_cast<QPushButton*>(this->centralWidget()->layout()->itemAt(this->centralWidget()->layout()->count() - 1)->widget());
+        btn->setText("Start Sync");
+    }else{
+        cout << "to server mode\n";
+        QPushButton* btn = qobject_cast<QPushButton*>(this->centralWidget()->layout()->itemAt(this->centralWidget()->layout()->count() - 1)->widget());
+        btn->setText("Start Server");
+
+    }
+    serverMode = !serverMode;
+}
+
+void WindowGUI::startSyncFunc(){
+    initConn();
 }
 
 void WindowGUI::showDirSelect(){
@@ -75,12 +104,14 @@ void WindowGUI::showDirSelect(){
         if(fileNames.count() == 1){
             break;
         }
-        QMessageBox::warning( this, tr("Error"), tr("Please only select one library direcotry!"));
+        QMessageBox::warning( this, tr("Error"), tr("Please only select one library directory!"));
     }
 
     if(fileNames.count() == 1){
         localLibrary->resetLibrary();
         localLibrary->buildLibrary( fileNames[0].toStdString());
+
+        libSet = true;
 
         if(mainBox->layout()->count() > 1){
             for(int i = mainBox->layout()->count()-1; i >= 0; i--){

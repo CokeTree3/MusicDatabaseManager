@@ -1,6 +1,7 @@
 #include "app.h"
-#include "library.h"
-#include "qobject.h"
+
+bool libSet = false;
+bool serverMode = false;
 
 
 void printTree(string searchDir){
@@ -20,14 +21,17 @@ void printTree(string searchDir){
 
 int main(int argc, char *argv[])
 {
+    libSet = false;
+    serverMode = false;
 
     QApplication app(argc, argv);
-
+    
     WindowGUI win;
     Library library;
 
     win.setLocalLibrary(&library);
     if(argc > 1 && filesystem::exists(argv[1])){
+        libSet = true;
         library.buildLibrary(argv[1]);
         win.setMainWindowContent(&library);
     }else{

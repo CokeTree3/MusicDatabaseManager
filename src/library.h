@@ -1,5 +1,6 @@
 #ifndef LIBRARY_H
 #define LIBRARY_H
+#include "qfileinfo.h"
 #include "sys_headers.h"
 #include <nlohmann/json.hpp>
 
@@ -24,6 +25,9 @@ class Track{
         int readFile(string fileName);
         int readMP3TagFrame(ifstream& f, const string& neededTagID, string* output);
         int readFLACMetadataBlock(ifstream& f, const string& neededBlockType, string* output);
+
+        int readMP3TagFrameQt(QFile& f, const string& neededTagID, string* output);
+        int readFLACMetadataBlockQt(QFile& f, const string& neededBlockType, string* output);
 };
 
 class Album{
