@@ -14,16 +14,18 @@ INCLUDEPATH += .
 #DEFINES += QT_DISABLE_DEPRECATED_BEFORE=0x060000    # disables all the APIs deprecated before Qt 6.0.0
 
 # Input
-HEADERS += src/app.h src/gui.h src/library.h src/sys_headers.h
-SOURCES += src/app.cpp src/gui.cpp src/library.cpp
+HEADERS += src/app.h src/config.h src/gui.h src/library.h src/sys_headers.h src/networking.h
+SOURCES += src/app.cpp src/gui.cpp src/library.cpp src/networking.cpp
+CONFIG += c++20
 
 QMAKE_CXXFLAGS += -Wall -Wextra -Werror -Wpointer-arith -Wcast-qual \
              -Wno-missing-braces -Wempty-body -Wno-error=uninitialized \
              -Wno-error=deprecated-declarations \
              -pedantic-errors -pedantic \
-             -Os
+             -Os -std=c++20
 
 QT += widgets
+QT += concurrent
 
 # Place all object files in obj/
 OBJECTS_DIR = obj

@@ -17,6 +17,8 @@
 #include <QPixmap>
 #include <QMouseEvent>
 #include <QFileDialog>
+#include <QtConcurrent>
+#include <QFuture>
 
 
 
@@ -25,20 +27,22 @@
 class WindowGUI : public QMainWindow  {
 
     Q_OBJECT
+    
 
     public:
         WindowGUI(QWidget *parent = nullptr);
 
         void setMainWindowContent();
-        void setMainWindowContent(Library* library);
+        void setMainWindowContent(Library* library, string dispText = "Local Library");
         void setLocalLibrary(Library* library);
         
 
     private:
         QWidget* mainBox;
         Library* localLibrary;
+        QFutureWatcher<void> watcher;
 
-        void PrintText();
+        void connClientCallback(json receivedJson);
         void ChangeLblText(string text);
         void showDirSelect();
         void changeOpMode();

@@ -1,6 +1,7 @@
 #ifndef SYS_HEADERS_H
 #define SYS_HEADERS_H
 
+#include "config.h"
 
 #include <iostream>
 #include <list>
@@ -8,11 +9,14 @@
 #include <cstdlib>
 #include <unistd.h>
 #include <fstream>
+#include <nlohmann/json.hpp>
 #include <QWidget>
 #include <QApplication>
 
 
+
 using namespace std;
+using json = nlohmann::json;
 
 extern bool libSet;
 extern bool serverMode;
@@ -38,6 +42,9 @@ extern bool serverMode;
 
 #define PLATFORM_ANDROID
 #include <QDirIterator>
+#include <QFile>
+#include <QFileInfo>
+
 
 #endif
 

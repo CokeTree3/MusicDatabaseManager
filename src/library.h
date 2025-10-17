@@ -1,11 +1,7 @@
 #ifndef LIBRARY_H
 #define LIBRARY_H
-#include "qfileinfo.h"
 #include "sys_headers.h"
-#include <nlohmann/json.hpp>
 
-using json = nlohmann::json;
-using namespace std;
 
 class Track{
     public:

@@ -1,4 +1,10 @@
 #include "gui.h"
+#include "library.h"
+#include "networking.h"
+#include "qfuturewatcher.h"
+#include "sys_headers.h"
+#include <cstdint>
+#include <vector>
 
 void deleteQWidgetFromLayout(QLayout* layout, int indexInLayout){
     QLayoutItem* item = layout->takeAt(indexInLayout);
@@ -89,8 +95,38 @@ void WindowGUI::changeOpMode(){
     serverMode = !serverMode;
 }
 
+
+
 void WindowGUI::startSyncFunc(){
-    initConn();
+    if(!serverMode){
+        QVBoxLayout* layout = (QVBoxLayout*)centralWidget()->layout();
+        QLabel* syncLbl = new QLabel("Synchronizing with the server...");
+        layout->addWidget(syncLbl, 0, Qt::AlignRight);
+
+        bool ok{};
+        QString text = QInputDialog::getText(this, tr("Server address"),
+                                            tr("IP of the server:"), QLineEdit::Normal,
+                                            tr("127.0.0.1"), &ok);
+        json receivedJson;
+        if (ok && !text.isEmpty()){
+            QFuture<void> future = QtConcurrent::run([this, &text, &receivedJson]() {
+                initConn(&receivedJson,  text.toStdString());
+            });
+            watcher.setFuture(future);
+            connect(&watcher, &QFutureWatcher<void>::finished, this, [this, &receivedJson]{WindowGUI::connClientCallback(receivedJson); });
+        }
+    }
+    else{
+        QVBoxLayout* layout = (QVBoxLayout*)centralWidget()->layout();
+        QLabel* syncLbl = new QLabel("server operational...");
+        layout->addWidget(syncLbl, 0, Qt::AlignRight);
+        
+        QFuture<void> future = QtConcurrent::run([this]() {
+            json dat = localLibrary->libJson;
+            initConn(&dat);
+        });
+        watcher.setFuture(future);
+    }
 }
 
 void WindowGUI::showDirSelect(){
@@ -128,22 +164,33 @@ void WindowGUI::setLocalLibrary(Library* library){
     this->localLibrary = library;
 }
 
-void WindowGUI::PrintText(){
-    cout << "pressed" << endl;
+void WindowGUI::connClientCallback(json receivedJson){
+    if(receivedJson.empty()){
+        cout << "Could not obtain server library file!\nRetry connection\n";
+    }else{
+        json diff;
+        Library serverLib;
+        serverLib.buildFromJson(receivedJson);
+        localLibrary->find_diff(&serverLib, &diff);
+        
+        Library diffLib;
+        diffLib.buildFromJson(diff);
+        this->setMainWindowContent(&diffLib, "Differences in Local Library");
+    }
 }
 
 void WindowGUI::setMainWindowContent(){
     this->setMainWindowContent(localLibrary);
 }
 
-void WindowGUI::setMainWindowContent(Library* library){
+void WindowGUI::setMainWindowContent(Library* library, string dispText){
     if(this->centralWidget()->layout()->count() == 3){
         deleteQWidgetFromLayout(this->centralWidget()->layout(), 1);
     }
     
     QVBoxLayout* mainBoxLayout = (QVBoxLayout*)mainBox->layout();
-
-    QLabel* libLbl = new QLabel("<div style='font-size:13pt;'><b>Local Library</b></div>");
+    string titleText = string("<div style='font-size:13pt;'><b>") + dispText + string("</b></div>");
+    QLabel* libLbl = new QLabel(QString::fromStdString(titleText));
     libLbl->setTextInteractionFlags(Qt::TextSelectableByMouse);
     libLbl->setIndent(100);
     mainBoxLayout->addWidget(libLbl, 0);
