@@ -3,6 +3,7 @@
 *.o
 **/bin
 **/obj
+**/asio
 
 # QMake generated files
 .qmake*
