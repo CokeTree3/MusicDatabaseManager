@@ -18,8 +18,10 @@
 using namespace std;
 using json = nlohmann::json;
 
-extern bool libSet;
-extern bool serverMode;
+extern bool     libSet;
+extern bool     serverMode;
+extern string     remoteAddr;
+
 
 #if defined (__linux__) && !defined (__ANDROID__)
 
@@ -27,6 +29,7 @@ extern bool serverMode;
 #include <filesystem>
 #include <QDirIterator>
 #include <QFile>
+#include <QDir>
 #include <QFileInfo>
 
 #endif
@@ -43,6 +46,7 @@ extern bool serverMode;
 #define PLATFORM_ANDROID
 #include <QDirIterator>
 #include <QFile>
+#include <QDir>
 #include <QFileInfo>
 
 

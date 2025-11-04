@@ -1,16 +1,11 @@
 #include "gui.h"
-#include "library.h"
-#include "networking.h"
-#include "qfuturewatcher.h"
-#include "sys_headers.h"
-#include <cstdint>
-#include <vector>
 
 void deleteQWidgetFromLayout(QLayout* layout, int indexInLayout){
     QLayoutItem* item = layout->takeAt(indexInLayout);
     if (item) {
         QWidget* widget = item->widget();
         if (widget) {
+            widget->setParent(nullptr);
             delete widget;
         }
         delete item;
@@ -107,13 +102,14 @@ void WindowGUI::startSyncFunc(){
         QString text = QInputDialog::getText(this, tr("Server address"),
                                             tr("IP of the server:"), QLineEdit::Normal,
                                             tr("127.0.0.1"), &ok);
-        json receivedJson;
         if (ok && !text.isEmpty()){
-            QFuture<void> future = QtConcurrent::run([this, &text, &receivedJson]() {
-                initConn(&receivedJson,  text.toStdString());
+            remoteAddr = text.toStdString();
+            QFuture<void> future = QtConcurrent::run([this, &text]() {
+                initConn(&localLibrary->remoteLibJson,  remoteAddr);
             });
             watcher.setFuture(future);
-            connect(&watcher, &QFutureWatcher<void>::finished, this, [this, &receivedJson]{WindowGUI::connClientCallback(receivedJson); });
+            
+            connect(&watcher, &QFutureWatcher<void>::finished, this, [this, &text]{WindowGUI::connClientCallback(); });
         }
     }
     else{
@@ -164,19 +160,14 @@ void WindowGUI::setLocalLibrary(Library* library){
     this->localLibrary = library;
 }
 
-void WindowGUI::connClientCallback(json receivedJson){
-    if(receivedJson.empty()){
-        cout << "Could not obtain server library file!\nRetry connection\n";
-    }else{
-        json diff;
-        Library serverLib;
-        serverLib.buildFromJson(receivedJson);
-        localLibrary->find_diff(&serverLib, &diff);
-        
-        Library diffLib;
-        diffLib.buildFromJson(diff);
-        this->setMainWindowContent(&diffLib, "Differences in Local Library");
-    }
+void WindowGUI::connClientCallback(){
+    // popup for sync selection
+    cout << "calling sync\n";
+    localLibrary->syncWithServer();
+    cout << "sync finished\n";
+    QVBoxLayout* layout = (QVBoxLayout*)centralWidget()->layout();
+    deleteQWidgetFromLayout(layout, layout->count() - 1);
+    // update GUI
 }
 
 void WindowGUI::setMainWindowContent(){

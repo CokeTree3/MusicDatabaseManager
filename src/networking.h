@@ -12,6 +12,9 @@
 
 void initConn(json* jsonData, string addr = "127.0.0.1");
 
+void requestTrack(string requestPath, ofstream* fileOutput);
+
+
 
 
 

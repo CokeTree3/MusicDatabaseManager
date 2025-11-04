@@ -1,6 +1,7 @@
 #ifndef LIBRARY_H
 #define LIBRARY_H
 #include "sys_headers.h"
+#include "networking.h"
 
 
 class Track{
@@ -8,7 +9,7 @@ class Track{
         int order;
         int orderInAlbum;
         string name;
-        string path;
+        string fileName;
         
         Track(string name, int order);
         Track(int order, string filePath);
@@ -19,11 +20,17 @@ class Track{
         json getJsonStructure();
     private:
         int readFile(string fileName);
-        int readMP3TagFrame(ifstream& f, const string& neededTagID, string* output);
-        int readFLACMetadataBlock(ifstream& f, const string& neededBlockType, string* output);
+        
 
-        int readMP3TagFrameQt(QFile& f, const string& neededTagID, string* output);
-        int readFLACMetadataBlockQt(QFile& f, const string& neededBlockType, string* output);
+        #if defined (PLATFORM_LINUX) || defined (PLATFORM_WINDOWS)
+            int readMP3TagFrame(ifstream& f, const string& neededTagID, string* output);
+            int readFLACMetadataBlock(ifstream& f, const string& neededBlockType, string* output);
+        #endif
+
+        #if defined (PLATFORM_ANDROID)
+            int readMP3TagFrameQt(QFile& f, const string& neededTagID, string* output);
+            int readFLACMetadataBlockQt(QFile& f, const string& neededBlockType, string* output);
+        #endif
 };
 
 class Album{
@@ -83,6 +90,7 @@ class Library{
         vector<unique_ptr<Artist>> artistList;
         json libJson;
         string libPath;
+        json remoteLibJson;
 
         Library(){
             //Artists = new vector<Artist>();
@@ -92,15 +100,17 @@ class Library{
         int addToLibrary(json jsonSource);
         void resetLibrary();
         int buildLibrary(string searchDir);
-
         int buildFromJson(json jsonSource);
 
         int jsonRead();
 
         int find_diff(Library* remoteLib, json* jsonDiff);
+        int syncWithServer();
 
         void printData();
         void displayData();
+    private:
+        int createNewFile(string path);
 
 };
 

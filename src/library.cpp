@@ -1,10 +1,57 @@
 #include "library.h"
-#include "qfileinfo.h"
-#include <string>
 
 
 uint UcharArrayToUintLE(const unsigned char bytes[4]){
     return (uint)((bytes[0]) | ((bytes[1]) << 8) | ((bytes[2]) << 16) | ((bytes[3]) << 24));
+}
+
+void removeDir(string absolutePath){
+    #if defined (PLATFORM_LINUX) || defined (PLATFORM_WINDOWS)
+        error_code ec;
+        filesystem::remove_all(absolutePath, ec);
+        if(ec){
+            cout << "ERROR: couldn't remove directory or file: " << absolutePath << "\n Error: " << ec.message() << endl;
+         }
+    #endif
+
+    #if defined (PLATFORM_ANDROID)
+        QDir dirToRemove(QString::fromStdString(absolutePath));
+        if(dirToRemove.exists()){
+            dirToRemove.removeRecursively();
+        }
+    #endif
+}
+
+void removeFile(string absolutePath){
+    #if defined (PLATFORM_LINUX) || defined (PLATFORM_WINDOWS)
+        error_code ec;
+        filesystem::remove(absolutePath, ec);
+        if(ec){
+            cout << "ERROR: couldn't remove file: " << absolutePath << "\n Error: " << ec.message() << endl;
+         }
+    #endif
+
+    #if defined (PLATFORM_ANDROID)
+        QFile fileToRemove(QString::fromStdString(absolutePath));
+        if(fileToRemove.exists()){
+            fileToRemove.remove();
+        }
+    #endif
+}
+
+void makeDir(string absolutePath){
+    #if defined (PLATFORM_LINUX) || defined (PLATFORM_WINDOWS)
+        error_code ec;
+        filesystem::create_directory(absolutePath, ec);
+        if(ec){
+            cout << "ERROR: couldn't create directory: " << absolutePath << "\n Error: " << ec.message() << endl;
+         }
+    #endif
+
+    #if defined (PLATFORM_ANDROID)
+        QDir newDir;
+        newDir.mkpath(QString::fromStdString(absolutePath));
+    #endif
 }
 
 /*
@@ -131,6 +178,118 @@ int Library::find_diff(Library* remoteLib, json* jsonDiff){
     return 0;
 }
 
+int Library::syncWithServer(){
+    if(remoteLibJson.empty()){
+        cout << "Could not obtain server library file!\nRetry connection\n";
+    }else{
+        json diff;
+        Library serverLib;
+        serverLib.buildFromJson(remoteLibJson);
+        serverLib.find_diff(this, &diff);
+        
+        if(diff.empty()){
+            return 1;
+        }
+
+        cout << "starting fs operations\n";
+        for(json artistJson : diff["Artists"]){
+            string artistPath = this->libPath + "/" + string(artistJson["1Name"]);
+            cout << artistPath << endl;
+            if(artistJson.contains("Remove") && artistJson["Remove"] == true){
+                cout << "removing artist " << artistPath << endl;
+                removeDir(artistPath);
+                continue;
+            }
+            bool artistFound = false;
+            for (size_t i = 0; i < this->artistList.size(); i++){
+                
+                if(this->artistList[i]->name == string(artistJson["1Name"])){
+                    artistFound = true;
+
+                    for(json albumJson : artistJson["Albums"]){
+
+                        string albumPath = artistPath + "/" + string(albumJson["1Name"]);
+                        if(albumJson.contains("Remove") && albumJson["Remove"] == true){
+                            cout << "removing album " << albumPath << endl;
+                            removeDir(albumPath);
+                            continue;
+                        }
+
+                        bool albumFound = false;
+                        for(size_t j = 0; j < this->artistList[i]->albumList.size(); j++){
+
+                            if(this->artistList[i]->albumList[j]->name == string(albumJson["1Name"])){
+                                albumFound = true;
+
+                                for(json trackJson : albumJson["Tracks"]){
+                                    
+                                    if(trackJson.contains("Remove") && trackJson["Remove"] == true){
+                                        cout << "removing track " << string(trackJson["FileName"]) << endl;
+                                        removeFile(albumPath + "/" + string(trackJson["FileName"]));
+                                        continue;
+                                    }
+
+                                    bool trackFound = false;
+                                    for(size_t k = 0; k < this->artistList[i]->albumList[j]->trackList.size(); k++){                // Mignt not be needed as the Diff will only contain tracks that need downloading or removing
+                                        
+                                        if(this->artistList[i]->albumList[j]->trackList[k]->name == string(trackJson["1Name"])){    // Matches will never be found
+                                            trackFound = true;
+                                        }
+                                        
+                                    }
+                                    if(!trackFound){
+                                        //request song file
+                                        createNewFile(albumPath + "/" + string(trackJson["FileName"]));
+                                    }
+                                }
+                            }
+                        }
+                        if(!albumFound){
+                            makeDir(albumPath);
+
+                            for(json trackJson : albumJson["Tracks"]){
+                                createNewFile(albumPath + "/" + string(trackJson["FileName"]));
+                            }
+                        }
+                    }
+                }
+            }
+            if(!artistFound){
+                makeDir(artistPath);
+                for(json albumJson : artistJson["Albums"]){
+                    makeDir(artistPath + "/" + string(albumJson["1Name"]));
+
+                    for(json trackJson : albumJson["Tracks"]){
+                        createNewFile(artistPath + "/" + string(albumJson["1Name"]) + "/" + string(trackJson["FileName"]));
+                    }
+                }
+            }
+        }
+        ofstream f("libDiff.json");
+        f << setw(4) << diff;
+        f.close();
+
+    }
+
+
+    return 0;
+}
+
+int Library::createNewFile(string path){
+    ofstream trackFile;
+
+    trackFile.open(path);
+    if(!trackFile.is_open()){
+        cout << "error creating a new file " << path << endl;
+        return 1;
+    }
+    string relativePath = path.substr(libPath.length());
+    requestTrack(relativePath, &trackFile);
+
+    trackFile.close();
+    return 0;
+}
+
 
 int Library::addToLibrary(string name, string dirPath){
     artistList.push_back(make_unique<Artist>(name, dirPath));
@@ -149,7 +308,6 @@ void Library::resetLibrary(){
 }
 
 void Library::printData(){
-    jsonBuild();
     cout << "Artists in the database: \n";
     int count = 1;
     for(size_t i = 0; i < artistList.size(); i++){
@@ -546,6 +704,7 @@ Track::Track(string name, int order){
     this->name = name;
     this->order = order;
     this->orderInAlbum = order;
+    this->fileName = "";
 }
 
 Track::Track(int order, string filePath){
@@ -553,13 +712,14 @@ Track::Track(int order, string filePath){
     if(readFile(filePath)){
         
     }
-    this->path = filePath;
+    this->fileName = filePath.substr(filePath.rfind('/') + 1, filePath.npos);
 }
 
 Track::Track(json jsonSource){
     this->name = jsonSource["1Name"];
     this->orderInAlbum = jsonSource["Order"];
     this->order = this->orderInAlbum;
+    this->fileName = jsonSource["FileName"];
 }
 
 bool Track::equals(unique_ptr<Track>& rhs){
@@ -583,6 +743,7 @@ json Track::getJsonStructure(){
     }
     
     data["Order"] = this->orderInAlbum;
+    data["FileName"] = this->fileName;
 
     return data;
 }

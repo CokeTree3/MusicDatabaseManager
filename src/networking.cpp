@@ -3,13 +3,17 @@
 
 using asio::ip::tcp;
 
+namespace {
+    asio::io_context io_context;
+    std::unique_ptr<tcp::socket> sock;
+}
+
 void sendData(tcp::socket *socket, const void *data, size_t dataSize, error_code &ec) {
     size_t request_length = htonl(dataSize);
 
     vector<asio::const_buffer> dataBuf;
     dataBuf.push_back(asio::buffer(&request_length, sizeof(request_length)));
     dataBuf.push_back(asio::buffer(data, dataSize));
-
     asio::write(*socket, dataBuf, ec);
 
     if(ec) throw ec;
@@ -25,7 +29,11 @@ void readDataSize(tcp::socket *socket, size_t* dataSize, error_code &ec){
 }
 
 void readData(tcp::socket *socket, void* dataBuf, size_t dataSize, error_code &ec){
-    asio::read(*socket, asio::buffer(dataBuf, dataSize), ec);
+    size_t readSize = 0;
+    readSize = asio::read(*socket, asio::buffer(dataBuf, dataSize), ec);
+    if (readSize < dataSize){
+        cout << "not enough\n";
+    }
     if(ec) throw ec;
 }
 
@@ -45,39 +53,55 @@ private:
 
         size_t recvSize;
         asio::error_code ec;
-
-        readDataSize(&socket_, &recvSize, ec);
-        if (recvSize > 16384){
-            sendData(&socket_, (const void*)RESP_ERR, sizeof(RESP_ERR), ec);
-            return;
-        }
-        string recvBuf(recvSize, '\0');
-        readData(&socket_, recvBuf.data(), recvSize, ec);
-
-        if(!ec) {
-            if(recvBuf[0] == 'S' && recvBuf[1] == 'R' && recvBuf[2] == 'Q') {                               // SYNC request
-                cout << "received json request\n";
-                vector<uint8_t> jsonToSend = json::to_bjdata(*jsonData);
-                void* data = jsonToSend.data();
-
-                sendData(&socket_, data, jsonToSend.size(), ec);
-
-            }else if(recvBuf[0] == 'G' && recvBuf[1] == 'E' && recvBuf[2] == 'T'){                          // GET request
-                sendData(&socket_, (const void*)RESP_OK, sizeof(RESP_OK), ec);
-                cout << "Wrote OK\n";
-
-                //read next data as json
-
-            }else{
-                cout << "server received: \n";
-                cout << recvBuf << endl;
+        while(true){
+            readDataSize(&socket_, &recvSize, ec);
+            if (recvSize > 16384){
                 sendData(&socket_, (const void*)RESP_ERR, sizeof(RESP_ERR), ec);
+                continue;
             }
-        }else {
-            throw ec;
+            string recvBuf(recvSize, '\0');
+            readData(&socket_, recvBuf.data(), recvSize, ec);
+
+            if(!ec) {
+                if(recvBuf[0] == 'S' && recvBuf[1] == 'R' && recvBuf[2] == 'Q') {                               // SYNC request
+                    cout << "received a JSON request\n";
+                    vector<uint8_t> jsonToSend = json::to_bson(*jsonData);
+                    void* data = jsonToSend.data();
+
+                    sendData(&socket_, data, jsonToSend.size(), ec);
+
+                }else if(recvBuf[0] == 'G' && recvBuf[1] == 'E' && recvBuf[2] == 'T'){                          // GET request
+                    
+                    string req = recvBuf.substr(4);
+
+                    cout << "Request for " << req << endl;
+
+                    string requestPath = string((*jsonData)["LibraryPath"]) + "/" + req;
+
+                    ifstream f;
+                    f.open(requestPath, ios::binary);
+                    if(f.is_open()){
+                        vector<unsigned char> buff(std::istreambuf_iterator<char>(f), {});
+
+                        sendData(&socket_, buff.data(), buff.size(), ec);
+                    }else{
+                        cout << "file error\n";
+                        sendData(&socket_, static_cast<const void*>(RESP_ERR), sizeof(RESP_ERR), ec);
+                    }
+
+                }else{                                                                                          // Unknown request type
+                    cout << "server received: \n";
+                    cout << recvBuf << endl;
+                    sendData(&socket_, static_cast<const void*>(RESP_ERR), sizeof(RESP_ERR), ec);
+                }
+            }else if(ec == asio::error::eof || ec == asio::error::connection_reset){
+                cout << "Conn closed\n";
+                break;
+            }else{
+                throw ec;
+            }
         }
     }
-
     tcp::socket socket_;
     json* jsonData;
 };
@@ -122,31 +146,75 @@ void initConn(json* jsonData, string addr) {
         // init connection
         cout << "client run\n";
         try {
-            asio::io_context io_context;
-
-            tcp::socket s(io_context);
-
+            sock = std::make_unique<asio::ip::tcp::socket>(io_context);
             tcp::resolver resolver(io_context);
-            asio::connect(s, resolver.resolve(addr, to_string(CONNECT_PORT)));
+
+            asio::connect(*sock, resolver.resolve(addr, to_string(CONNECT_PORT)));
             if(jsonData == nullptr){
                 throw;
             }
             error_code ec;
-
-            sendData(&s, (const void*)RQ_SYNC, sizeof(RQ_SYNC), ec);
+            if(sock->is_open()){
+                cout << "init is open\n"; 
+            }
+            sendData(sock.get(), static_cast<const void*>(RQ_SYNC), sizeof(RQ_SYNC), ec);
 
             size_t jsonSize;
-            readDataSize(&s, &jsonSize, ec);
+            readDataSize(sock.get(), &jsonSize, ec);
 
-            void* jsonBuf = malloc(jsonSize);
-            readData(&s, jsonBuf, jsonSize, ec);
+            char* jsonBuf = static_cast<char*>(malloc(jsonSize));
+            readData(sock.get(), jsonBuf, jsonSize, ec);
 
-            vector<char> jsonRecv((char*)jsonBuf, (char*)jsonBuf + jsonSize);
-            *jsonData = json::from_bjdata(jsonRecv);
+            if(jsonBuf[0] == 'E' && jsonBuf[1] == 'R' && jsonBuf[2] == 'R'){
+                cout << "Error requesting server library" << endl;
+            }else{
+                vector<char> jsonRecv(jsonBuf, jsonBuf + jsonSize);
+                json test = json::from_bson(jsonRecv);
+                *jsonData = std::move(test);
+                
+                cout << "Received server json Library\n";
+            }
+            
             free(jsonBuf);
 
         }catch (std::exception &e){
             cout << "net error " << e.what() << endl;
         }
     }
+}
+
+void requestTrack(string requestPath, ofstream* fileOutput){
+    if(!fileOutput->is_open() || !sock->is_open()){
+        return;
+    }
+    cout << "requesting " << requestPath << endl;
+    try{
+        error_code ec;
+
+        char* request = new char[3 + requestPath.length()];
+        memcpy(request, RQ_GET, 3);
+        memcpy(request + 3, requestPath.data(), requestPath.length());
+        sendData(sock.get(), static_cast<const void*>(request), 3 + requestPath.length(), ec);
+
+        size_t fileSize = 0;
+        readDataSize(sock.get(), &fileSize, ec);
+        if(fileSize > 0){
+            char* fileBuf = static_cast<char *>(malloc(fileSize));
+            readData(sock.get(), fileBuf, fileSize, ec);
+            if(fileBuf[0] == 'E' && fileBuf[1] == 'R' && fileBuf[2] == 'R'){
+                cout << "Error requesting file " << requestPath << endl;
+            }
+            else{
+                fileOutput->write(static_cast<char*>(fileBuf), fileSize);
+            }
+            
+            free(fileBuf);
+        }
+        
+    }catch (error_code e){
+        cout << "net error " << e.message() << endl;
+    }
+    
+    // send req, read size, malloc the size, read to the mem ptr, write from mem to fileptr
+    
 }

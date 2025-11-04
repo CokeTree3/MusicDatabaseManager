@@ -42,7 +42,7 @@ class WindowGUI : public QMainWindow  {
         Library* localLibrary;
         QFutureWatcher<void> watcher;
 
-        void connClientCallback(json receivedJson);
+        void connClientCallback();
         void ChangeLblText(string text);
         void showDirSelect();
         void changeOpMode();

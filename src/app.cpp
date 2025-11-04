@@ -2,6 +2,7 @@
 
 bool libSet = false;
 bool serverMode = false;
+string remoteAddr = "192.168.000.000";
 
 
 void printTree(string searchDir){
