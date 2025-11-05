@@ -22,12 +22,12 @@ class Track{
         int readFile(string fileName);
         
 
-        #if defined (PLATFORM_LINUX) || defined (PLATFORM_WINDOWS)
+        #if defined (PLATFORM_LINUX)// || defined (PLATFORM_WINDOWS)
             int readMP3TagFrame(ifstream& f, const string& neededTagID, string* output);
             int readFLACMetadataBlock(ifstream& f, const string& neededBlockType, string* output);
         #endif
 
-        #if defined (PLATFORM_ANDROID)
+        #if defined (PLATFORM_ANDROID) || defined (PLATFORM_WINDOWS)
             int readMP3TagFrameQt(QFile& f, const string& neededTagID, string* output);
             int readFLACMetadataBlockQt(QFile& f, const string& neededBlockType, string* output);
         #endif

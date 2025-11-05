@@ -1,5 +1,6 @@
 #include "networking.h"
 #include "config.h"
+#include <cstdint>
 
 using asio::ip::tcp;
 
@@ -8,29 +9,31 @@ namespace {
     std::unique_ptr<tcp::socket> sock;
 }
 
-void sendData(tcp::socket *socket, const void *data, size_t dataSize, error_code &ec) {
-    size_t request_length = htonl(dataSize);
+void sendData(tcp::socket *socket, const void *data, uint64_t dataSize, error_code &ec) {
+    uint64_t request_length = htonl(dataSize);
 
     vector<asio::const_buffer> dataBuf;
-    dataBuf.push_back(asio::buffer(&request_length, sizeof(request_length)));
+    dataBuf.push_back(asio::buffer(&request_length, sizeof(request_length)));           // size_t writes diff data on win vs linux
     dataBuf.push_back(asio::buffer(data, dataSize));
     asio::write(*socket, dataBuf, ec);
 
     if(ec) throw ec;
 }
 
-void readDataSize(tcp::socket *socket, size_t* dataSize, error_code &ec){
-    asio::read(*socket, asio::buffer(dataSize, sizeof(dataSize)), ec);
+void readDataSize(tcp::socket *socket, uint64_t* dataSize, error_code &ec){
+    asio::read(*socket, asio::buffer(dataSize, sizeof(*dataSize)), ec);
     if(!ec) {
-        *dataSize = ntohl(*dataSize);
+        uint64_t sizeConverted = ntohl(*dataSize);
+        *dataSize = sizeConverted;
     }else {
         throw ec;
     }
 }
 
-void readData(tcp::socket *socket, void* dataBuf, size_t dataSize, error_code &ec){
-    size_t readSize = 0;
+void readData(tcp::socket *socket, void* dataBuf, uint64_t dataSize, error_code &ec){
+    uint64_t readSize = 0;
     readSize = asio::read(*socket, asio::buffer(dataBuf, dataSize), ec);
+
     if (readSize < dataSize){
         cout << "not enough\n";
     }
@@ -51,7 +54,7 @@ public:
 private:
     void do_read(){
 
-        size_t recvSize;
+        uint64_t recvSize = 0;
         asio::error_code ec;
         while(true){
             readDataSize(&socket_, &recvSize, ec);
@@ -159,7 +162,7 @@ void initConn(json* jsonData, string addr) {
             }
             sendData(sock.get(), static_cast<const void*>(RQ_SYNC), sizeof(RQ_SYNC), ec);
 
-            size_t jsonSize;
+            uint64_t jsonSize;
             readDataSize(sock.get(), &jsonSize, ec);
 
             char* jsonBuf = static_cast<char*>(malloc(jsonSize));
@@ -196,7 +199,7 @@ void requestTrack(string requestPath, ofstream* fileOutput){
         memcpy(request + 3, requestPath.data(), requestPath.length());
         sendData(sock.get(), static_cast<const void*>(request), 3 + requestPath.length(), ec);
 
-        size_t fileSize = 0;
+        uint64_t fileSize = 0;
         readDataSize(sock.get(), &fileSize, ec);
         if(fileSize > 0){
             char* fileBuf = static_cast<char *>(malloc(fileSize));

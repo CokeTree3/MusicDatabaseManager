@@ -38,6 +38,10 @@ extern string     remoteAddr;
 
 #define PLATFORM_WINDOWS
 #include <filesystem>
+#include <QDirIterator>
+#include <QFile>
+#include <QDir>
+#include <QFileInfo>
 
 #endif
 

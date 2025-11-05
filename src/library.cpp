@@ -92,7 +92,7 @@ int Library::buildLibrary(string searchDir){
 }
 
 void Library::jsonBuild(){
-    ofstream s("library.json");
+    ofstream s("library.json", ios::binary);
 
     size_t count = artistList.size();
     libJson["LibraryPath"] = libPath;
@@ -112,7 +112,7 @@ int Library::jsonRead(){
     string libFile = "library.json";
 
     if(access( libFile.c_str(), F_OK ) != -1){
-        ifstream f(libFile);
+        ifstream f(libFile, ios::binary);
         json data = json::parse(f);
         f.close();
         if(buildLibrary(data["LibraryPath"])) return 1;
@@ -121,7 +121,7 @@ int Library::jsonRead(){
 
     }else{
         cout << "Creating a new Library JSON file\n";
-        ofstream of(libFile);
+        ofstream of(libFile, ios::binary);
         libJson["LibraryPath"] = libPath;
         of << setw(4) << libJson;
         of.close();
@@ -190,6 +190,10 @@ int Library::syncWithServer(){
         if(diff.empty()){
             return 1;
         }
+
+        ofstream f("libDiff.json", ios::binary);
+        f << setw(4) << diff;
+        f.close();
 
         cout << "starting fs operations\n";
         for(json artistJson : diff["Artists"]){
@@ -265,10 +269,7 @@ int Library::syncWithServer(){
                 }
             }
         }
-        ofstream f("libDiff.json");
-        f << setw(4) << diff;
-        f.close();
-
+        
     }
 
 
@@ -276,9 +277,14 @@ int Library::syncWithServer(){
 }
 
 int Library::createNewFile(string path){
-    ofstream trackFile;
+    #if defined (PLATFORM_WINDOWS)
+    filesystem::path fPath = filesystem::u8path(path);
+    ofstream trackFile(fPath, ios::binary);
+    #endif
 
-    trackFile.open(path);
+    #if defined (PLATFORM_LINUX) || defined (PLATFORM_ANDROID)
+    ofstream trackFile(path, ios::binary);
+    #endif
     if(!trackFile.is_open()){
         cout << "error creating a new file " << path << endl;
         return 1;
@@ -710,9 +716,15 @@ Track::Track(string name, int order){
 Track::Track(int order, string filePath){
     this->order = order;
     if(readFile(filePath)){
-        
+        cout << "file reading error: " << filePath << endl;
     }
-    this->fileName = filePath.substr(filePath.rfind('/') + 1, filePath.npos);
+    #if defined (PLATFORM_WINDOWS)
+        this->fileName = filePath.substr(filePath.rfind('\\') + 1, filePath.npos);
+    #endif
+
+    #if !defined (PLATFORM_WINDOWS)
+        this->fileName = filePath.substr(filePath.rfind('/') + 1, filePath.npos);
+    #endif
 }
 
 Track::Track(json jsonSource){
@@ -748,7 +760,7 @@ json Track::getJsonStructure(){
     return data;
 }
 
-#if defined (PLATFORM_LINUX) || defined (PLATFORM_WINDOWS)
+#if defined (PLATFORM_LINUX)// || defined (PLATFORM_WINDOWS)
 int Track::readMP3TagFrame(ifstream& f, const string& neededTagID, string* output){
     string tagID(4, '\0');
     f.read(&tagID[0], 4);
@@ -820,7 +832,7 @@ int Track::readFLACMetadataBlock(ifstream& f, const string& neededBlockType, str
 }
 #endif
 
-#if defined (PLATFORM_ANDROID)
+#if defined (PLATFORM_ANDROID)  || defined (PLATFORM_WINDOWS)
 int Track::readMP3TagFrameQt(QFile& f, const string& neededTagID, string* output){
     string tagID(4, '\0');
     f.read(&tagID[0], 4);
@@ -894,11 +906,14 @@ int Track::readFLACMetadataBlockQt(QFile& f, const string& neededBlockType, stri
 #endif
 
 
-#if defined (PLATFORM_LINUX) || defined (PLATFORM_WINDOWS)
+#if defined (PLATFORM_LINUX)// || defined (PLATFORM_WINDOWS)
+
 int Track::readFile(string fileName){
 
     ifstream f(fileName, ios::binary);
     if(!f.is_open()){
+        cout << "can't open -> " ;
+        printf("%x %x %x %x ", fileName[51], fileName[52], fileName[53], fileName[54]);
         return 1;
     }
     string title = "";
@@ -974,7 +989,7 @@ int Track::readFile(string fileName){
 }
 #endif
 
-#if defined (PLATFORM_ANDROID)
+#if defined (PLATFORM_ANDROID) || defined (PLATFORM_WINDOWS)
 
 int Track::readFile(string fileName){
 
