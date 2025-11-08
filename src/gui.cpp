@@ -27,7 +27,7 @@ WindowGUI::WindowGUI(QWidget* parent) :QMainWindow(parent) {
     auto *opModeSelect = new QAction("&Enable Server mode", this);
     opModeSelect->setCheckable(true);
     QMenu *fileMenu = menuBar()->addMenu("&File");
-    
+
     fileMenu->addAction(libraryPath);
     fileMenu->addAction(opModeSelect);
     fileMenu->addAction(quit);
@@ -46,7 +46,7 @@ WindowGUI::WindowGUI(QWidget* parent) :QMainWindow(parent) {
     mainBox = new QWidget(mainScrollArea);
     mainBox->setLayout(new QVBoxLayout());
 
-    
+
     mainScrollArea->setWidget(mainBox);
     mainScrollArea->setWidgetResizable(true);
     mainScrollArea->setHorizontalScrollBarPolicy(Qt::ScrollBarAlwaysOff);
@@ -100,28 +100,42 @@ void WindowGUI::startSyncFunc(){
 
         bool ok{};
         QString text = QInputDialog::getText(this, tr("Server address"),
-                                            tr("IP of the server:"), QLineEdit::Normal,
-                                            tr("127.0.0.1"), &ok);
+                                             tr("IP of the server:"), QLineEdit::Normal,
+                                             tr("127.0.0.1"), &ok);
         if (ok && !text.isEmpty()){
             remoteAddr = text.toStdString();
+            #if defined (PLATFORM_LINUX) || defined (PLATFORM_WINDOWS)
             QFuture<void> future = QtConcurrent::run([this, &text]() {
                 initConn(&localLibrary->remoteLibJson,  remoteAddr);
             });
             watcher.setFuture(future);
-            
+
             connect(&watcher, &QFutureWatcher<void>::finished, this, [this, &text]{WindowGUI::connClientCallback(); });
+            #endif
+
+            #if defined (PLATFORM_ANDROID)                          // Add multithreading support when QNetwork is used (QFuture not supported)
+            initConn(&localLibrary->remoteLibJson,  remoteAddr);
+            connClientCallback();
+            #endif
         }
     }
     else{
+        #if defined (PLATFORM_ANDROID)
+        cout << "Server operations not supported on current platform!\n";
+        QMessageBox::information(this, "Warning", "Server operations not supported on current platform!");
+        #endif
+
+        #if defined(PLATFORM_LINUX) || defined (PLATFORM_WINDOWS)
         QVBoxLayout* layout = (QVBoxLayout*)centralWidget()->layout();
         QLabel* syncLbl = new QLabel("server operational...");
         layout->addWidget(syncLbl, 0, Qt::AlignRight);
-        
+
         QFuture<void> future = QtConcurrent::run([this]() {
             json dat = localLibrary->libJson;
             initConn(&dat);
         });
         watcher.setFuture(future);
+        #endif
     }
 }
 
@@ -150,7 +164,7 @@ void WindowGUI::showDirSelect(){
                 deleteQWidgetFromLayout(mainBox->layout(), i);
             }
         }
-        
+
         this->setMainWindowContent();
     }
 
@@ -160,13 +174,17 @@ void WindowGUI::setLocalLibrary(Library* library){
     this->localLibrary = library;
 }
 
+
 void WindowGUI::connClientCallback(){
     // popup for sync selection
     cout << "calling sync\n";
+
     localLibrary->syncWithServer();
     cout << "sync finished\n";
+
     QVBoxLayout* layout = (QVBoxLayout*)centralWidget()->layout();
     deleteQWidgetFromLayout(layout, layout->count() - 1);
+
     // update GUI
 }
 
@@ -178,7 +196,7 @@ void WindowGUI::setMainWindowContent(Library* library, string dispText){
     if(this->centralWidget()->layout()->count() == 3){
         deleteQWidgetFromLayout(this->centralWidget()->layout(), 1);
     }
-    
+
     QVBoxLayout* mainBoxLayout = (QVBoxLayout*)mainBox->layout();
     string titleText = string("<div style='font-size:13pt;'><b>") + dispText + string("</b></div>");
     QLabel* libLbl = new QLabel(QString::fromStdString(titleText));
@@ -193,13 +211,13 @@ void WindowGUI::setMainWindowContent(Library* library, string dispText){
 
         mainBoxLayout->addWidget(artistLabel, 0);
         for(size_t j = 0; j < library->artistList[i]->albumCount; j++){
-            
+
             AlbumDropdown* albumLine = new AlbumDropdown(library->artistList[i]->albumList[j]);
             mainBoxLayout->addWidget(albumLine);
-            
+
             connect(albumLine, &AlbumDropdown::leftClicked, albumLine, &AlbumDropdown::onLeftClick);
             connect(albumLine, &AlbumDropdown::rightClicked, albumLine, &AlbumDropdown::onRightClick);
-            
+
         }
     }
 }
@@ -241,7 +259,7 @@ void AlbumDropdown::onLeftClick(){
             trackLabel->setTextInteractionFlags(Qt::TextSelectableByMouse);
             trackLabel->setIndent(50);
             albumLayout->addWidget(trackLabel);
-            
+
         }
     }else{
         for(size_t i = albumLayout->count()-1; i > 0; i--){
@@ -253,5 +271,5 @@ void AlbumDropdown::onLeftClick(){
 
 void AlbumDropdown::onRightClick(){
     cout << "sdasd" << endl;
-    
+
 }

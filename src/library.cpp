@@ -6,52 +6,45 @@ uint UcharArrayToUintLE(const unsigned char bytes[4]){
 }
 
 void removeDir(string absolutePath){
-    #if defined (PLATFORM_LINUX) || defined (PLATFORM_WINDOWS)
-        error_code ec;
-        filesystem::remove_all(absolutePath, ec);
-        if(ec){
-            cout << "ERROR: couldn't remove directory or file: " << absolutePath << "\n Error: " << ec.message() << endl;
-         }
-    #endif
 
-    #if defined (PLATFORM_ANDROID)
-        QDir dirToRemove(QString::fromStdString(absolutePath));
-        if(dirToRemove.exists()){
-            dirToRemove.removeRecursively();
-        }
-    #endif
+#if defined (PLATFORM_LINUX) || defined (PLATFORM_WINDOWS)
+    error_code ec;
+    filesystem::remove_all(absolutePath, ec);
+    if(ec){
+        cout << "ERROR: couldn't remove directory or file: " << absolutePath << "\n Error: " << ec.message() << endl;
+    }
+#elif defined (PLATFORM_ANDROID)                                          // Dir removing on Android not implemented
+    cout << "Directory removing is not supported" << endl;
+#endif
 }
 
 void removeFile(string absolutePath){
-    #if defined (PLATFORM_LINUX) || defined (PLATFORM_WINDOWS)
-        error_code ec;
-        filesystem::remove(absolutePath, ec);
-        if(ec){
-            cout << "ERROR: couldn't remove file: " << absolutePath << "\n Error: " << ec.message() << endl;
-         }
-    #endif
 
-    #if defined (PLATFORM_ANDROID)
-        QFile fileToRemove(QString::fromStdString(absolutePath));
-        if(fileToRemove.exists()){
-            fileToRemove.remove();
-        }
-    #endif
+#if defined (PLATFORM_LINUX) || defined (PLATFORM_WINDOWS)
+    error_code ec;
+    filesystem::remove(absolutePath, ec);
+    if(ec){
+        cout << "ERROR: couldn't remove file: " << absolutePath << "\n Error: " << ec.message() << endl;
+    }
+#elif defined (PLATFORM_ANDROID)                                          // File removing on Android not implemented
+    QFile fileToRemove(QString::fromStdString(absolutePath));
+    if(fileToRemove.exists()){
+        fileToRemove.remove();
+    }
+#endif
+    return;
 }
 
-void makeDir(string absolutePath){
-    #if defined (PLATFORM_LINUX) || defined (PLATFORM_WINDOWS)
-        error_code ec;
-        filesystem::create_directory(absolutePath, ec);
-        if(ec){
-            cout << "ERROR: couldn't create directory: " << absolutePath << "\n Error: " << ec.message() << endl;
-         }
-    #endif
+void makeDir(string absolutePath){                                          // Directory creating on Android not needed
 
-    #if defined (PLATFORM_ANDROID)
-        QDir newDir;
-        newDir.mkpath(QString::fromStdString(absolutePath));
-    #endif
+#if defined (PLATFORM_LINUX) || defined (PLATFORM_WINDOWS)
+    error_code ec;
+    filesystem::create_directory(absolutePath, ec);
+    if(ec){
+        cout << "ERROR: couldn't create directory: " << absolutePath << "\n Error: " << ec.message() << endl;
+    }
+#endif
+    return;
 }
 
 /*
@@ -64,7 +57,7 @@ int Library::buildLibrary(string searchDir){
     libPath = searchDir;
     int count = 1;
 
-    #if defined (PLATFORM_LINUX) || defined (PLATFORM_WINDOWS)
+#if defined (PLATFORM_LINUX) || defined (PLATFORM_WINDOWS)
     for (auto i = filesystem::directory_iterator(searchDir); i != filesystem::directory_iterator(); ++i){
         if(!i->is_directory()){
             continue;
@@ -72,9 +65,7 @@ int Library::buildLibrary(string searchDir){
         this->addToLibrary(i->path().lexically_relative(searchDir).string(), i->path().string());
         count++;
     }
-    #endif
-
-    #if defined (PLATFORM_ANDROID)
+#elif defined (PLATFORM_ANDROID)
 
     QDirIterator iter(QString::fromStdString(searchDir), QDir::NoDotAndDotDot | QDir::AllEntries);
     while(iter.hasNext()){
@@ -85,7 +76,7 @@ int Library::buildLibrary(string searchDir){
         this->addToLibrary(iter.fileName().toStdString(), iter.filePath().toStdString());
         count++;
     }
-    #endif
+#endif
 
     jsonBuild();
     return 0;
@@ -242,8 +233,7 @@ int Library::syncWithServer(){
                                         
                                     }
                                     if(!trackFound){
-                                        //request song file
-                                        createNewFile(albumPath + "/" + string(trackJson["FileName"]));
+                                        createNewFile(albumPath + "/", string(trackJson["FileName"]));
                                     }
                                 }
                             }
@@ -252,7 +242,7 @@ int Library::syncWithServer(){
                             makeDir(albumPath);
 
                             for(json trackJson : albumJson["Tracks"]){
-                                createNewFile(albumPath + "/" + string(trackJson["FileName"]));
+                                createNewFile(albumPath + "/", string(trackJson["FileName"]));
                             }
                         }
                     }
@@ -264,7 +254,7 @@ int Library::syncWithServer(){
                     makeDir(artistPath + "/" + string(albumJson["1Name"]));
 
                     for(json trackJson : albumJson["Tracks"]){
-                        createNewFile(artistPath + "/" + string(albumJson["1Name"]) + "/" + string(trackJson["FileName"]));
+                        createNewFile(artistPath + "/" + string(albumJson["1Name"]) + "/", string(trackJson["FileName"]));
                     }
                 }
             }
@@ -276,26 +266,50 @@ int Library::syncWithServer(){
     return 0;
 }
 
-int Library::createNewFile(string path){
-    #if defined (PLATFORM_WINDOWS)
-    filesystem::path fPath = filesystem::u8path(path);
-    ofstream trackFile(fPath, ios::binary);
-    #endif
+#if defined (PLATFORM_LINUX) || defined (PLATFORM_WINDOWS)
+int Library::createNewFile(string path, string fName){
 
-    #if defined (PLATFORM_LINUX) || defined (PLATFORM_ANDROID)
-    ofstream trackFile(path, ios::binary);
-    #endif
+#if defined (PLATFORM_WINDOWS)
+    filesystem::path fPath = filesystem::u8path(path + fName);
+    ofstream trackFile(fPath, ios::binary);
+#endif
+
+#if defined (PLATFORM_LINUX)
+    ofstream trackFile(path + fName, ios::binary);
+#endif
+
     if(!trackFile.is_open()){
-        cout << "error creating a new file " << path << endl;
+        cout << "error creating a new file " << path + fName << endl;
         return 1;
     }
-    string relativePath = path.substr(libPath.length());
+    string relativePath = string(path+fName).substr(libPath.length());
     requestTrack(relativePath, &trackFile);
 
     trackFile.close();
     return 0;
 }
+#endif
 
+#if defined (PLATFORM_ANDROID)
+int Library::createNewFile(string path, string fName){
+    string type = fName.substr(fName.rfind('.') + 1, fName.npos);
+    string relativePath = path.substr(libPath.length() + 1);
+
+    if(!permsObtained){
+        //requestPermissions();
+    }
+    vector<char> buf;
+    string relativePathWName = string(path+fName).substr(libPath.length());
+    requestTrack(relativePathWName, buf);
+
+    int res = createFileAndroid(fName, relativePath, buf.data(), buf.size());
+
+    if(res != 0){
+        cout << "Error creating track file: " << path + fName <<  endl;                 // error msg notif on android
+    }
+    return 0;
+}
+#endif
 
 int Library::addToLibrary(string name, string dirPath){
     artistList.push_back(make_unique<Artist>(name, dirPath));
@@ -473,17 +487,16 @@ int Artist::directoryToAlbums(string path){
     if(path == ""){
         return 1;
     }
-    #if defined (PLATFORM_LINUX) || defined (PLATFORM_WINDOWS)
+#if defined (PLATFORM_LINUX) || defined (PLATFORM_WINDOWS)
+
     for (auto i = filesystem::directory_iterator(path); i != filesystem::directory_iterator(); ++i){
         if(!i->is_directory()){
             continue;
         }
-        
         addAlbum(i->path().lexically_relative(path).string(), i->path().string());
     }
-    #endif
 
-    #if defined (PLATFORM_ANDROID)
+#elif defined (PLATFORM_ANDROID)
     
     QDirIterator iter(QString::fromStdString(path), QDir::NoDotAndDotDot | QDir::AllEntries);
     while(iter.hasNext()){
@@ -493,8 +506,7 @@ int Artist::directoryToAlbums(string path){
         }
         addAlbum(iter.fileName().toStdString(), iter.filePath().toStdString());
     }
-
-    #endif
+#endif
     return 0;
 }
 
@@ -506,42 +518,35 @@ int Artist::directoryToAlbums(string path){
 Album::Album(string name){
     this->name = name;
 
-    #if defined (PLATFORM_LINUX) || defined (PLATFORM_WINDOWS)
+#if defined (PLATFORM_LINUX) || defined (PLATFORM_WINDOWS)
     this->coverPath = filesystem::current_path().string() + "/assets/missingCov.jpg";
-    #endif
 
-    #if defined (PLATFORM_ANDROID)                      // TODO add missing cover placeholder icon
+#elif defined (PLATFORM_ANDROID)                      // TODO add missing cover placeholder icon
     this->coverPath = "";
-    #endif
+#endif
     trackCount = 0;
 }
 
 Album::Album(string name, string dirPath){
     this->name = name;
 
-    #if defined (PLATFORM_LINUX) || defined (PLATFORM_WINDOWS)
-    this->coverPath = filesystem::current_path().string() + "/assets/missingCov.jpg";
-    #endif
-
-    #if defined (PLATFORM_ANDROID)                      // TODO add missing cover placeholder icon
-    this->coverPath = "";
-    #endif
     if(directoryToTracks(dirPath)){
         //throw error
     }
     trackCount = trackList.size();
 
-    #if defined (PLATFORM_LINUX) || defined (PLATFORM_WINDOWS)
+#if defined (PLATFORM_LINUX) || defined (PLATFORM_WINDOWS)
 
     if(filesystem::exists(filesystem::path(dirPath + "/cover.jpg"))){
         coverPath = dirPath + "/cover.jpg";
     }
     else if(filesystem::exists(filesystem::path(dirPath + "/cover.png"))){
         coverPath = dirPath + "/cover.png";
+    }else{
+        coverPath = filesystem::current_path().string() + "/assets/missingCov.jpg";
     }
-    #endif
 
-    #if defined (PLATFORM_ANDROID)
+#elif defined (PLATFORM_ANDROID)
 
     if(QFileInfo::exists(QString::fromStdString(dirPath + "/cover.jpg"))){
         coverPath = dirPath + "/cover.jpg";
@@ -549,7 +554,8 @@ Album::Album(string name, string dirPath){
     else if(QFileInfo::exists(QString::fromStdString(dirPath + "/cover.png"))){
         coverPath = dirPath + "/cover.png";
     }
-    #endif
+
+#endif
 }
 
 Album::Album(json jsonSource){
@@ -655,7 +661,7 @@ int Album::directoryToTracks(string path){
 
     int trackOrder = 1;
 
-    #if defined (PLATFORM_LINUX) || defined (PLATFORM_WINDOWS)
+#if defined (PLATFORM_LINUX) || defined (PLATFORM_WINDOWS)
 
     for (auto i = filesystem::directory_iterator(path); i != filesystem::directory_iterator(); ++i){
         
@@ -673,9 +679,8 @@ int Album::directoryToTracks(string path){
             trackOrder++;
         }
     }
-    #endif
 
-    #if defined (PLATFORM_ANDROID)
+#elif defined (PLATFORM_ANDROID)
 
     QDirIterator iter(QString::fromStdString(path), QDir::NoDotAndDotDot | QDir::AllEntries);
     while(iter.hasNext()){
@@ -693,7 +698,7 @@ int Album::directoryToTracks(string path){
             trackOrder++;
         }
     }
-    #endif
+#endif
 
     sort(trackList.begin(), trackList.end(), [](const unique_ptr<Track> &a, const unique_ptr<Track> &b) {
                   return a->orderInAlbum < b->orderInAlbum;
@@ -718,13 +723,11 @@ Track::Track(int order, string filePath){
     if(readFile(filePath)){
         cout << "file reading error: " << filePath << endl;
     }
-    #if defined (PLATFORM_WINDOWS)
-        this->fileName = filePath.substr(filePath.rfind('\\') + 1, filePath.npos);
-    #endif
-
-    #if !defined (PLATFORM_WINDOWS)
-        this->fileName = filePath.substr(filePath.rfind('/') + 1, filePath.npos);
-    #endif
+#if defined (PLATFORM_WINDOWS)
+    this->fileName = filePath.substr(filePath.rfind('\\') + 1, filePath.npos);
+#else
+    this->fileName = filePath.substr(filePath.rfind('/') + 1, filePath.npos);
+#endif
 }
 
 Track::Track(json jsonSource){
@@ -760,7 +763,7 @@ json Track::getJsonStructure(){
     return data;
 }
 
-#if defined (PLATFORM_LINUX)// || defined (PLATFORM_WINDOWS)
+#if defined (PLATFORM_LINUX)// || defined (PLATFORM_WINDOWS)                                Windows currently temporarly moved to QT approach
 int Track::readMP3TagFrame(ifstream& f, const string& neededTagID, string* output){
     string tagID(4, '\0');
     f.read(&tagID[0], 4);

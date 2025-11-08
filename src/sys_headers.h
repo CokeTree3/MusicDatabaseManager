@@ -7,6 +7,7 @@
 #include <list>
 #include <vector>
 #include <cstdlib>
+#include <cstdint>
 #include <unistd.h>
 #include <fstream>
 #include <nlohmann/json.hpp>
@@ -23,9 +24,8 @@ extern bool     serverMode;
 extern string     remoteAddr;
 
 
-#if defined (__linux__) && !defined (__ANDROID__)
+#if defined (PLATFORM_LINUX)
 
-#define PLATFORM_LINUX
 #include <filesystem>
 #include <QDirIterator>
 #include <QFile>
@@ -34,9 +34,8 @@ extern string     remoteAddr;
 
 #endif
 
-#if defined (_WIN32)
+#if defined (PLATFORM_WINDOWS)
 
-#define PLATFORM_WINDOWS
 #include <filesystem>
 #include <QDirIterator>
 #include <QFile>
@@ -45,13 +44,17 @@ extern string     remoteAddr;
 
 #endif
 
-#if defined (__ANDROID__)
+#if defined (PLATFORM_ANDROID)
 
-#define PLATFORM_ANDROID
 #include <QDirIterator>
 #include <QFile>
 #include <QDir>
 #include <QFileInfo>
+#include <QtAndroid>
+#include <QAndroidJniObject>
+#include <QAndroidJniEnvironment>
+
+#include "android_compat.h"
 
 
 #endif

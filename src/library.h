@@ -22,7 +22,7 @@ class Track{
         int readFile(string fileName);
         
 
-        #if defined (PLATFORM_LINUX)// || defined (PLATFORM_WINDOWS)
+        #if defined (PLATFORM_LINUX)// || defined (PLATFORM_WINDOWS)                        Windows currently temporarly moved to QT approach                
             int readMP3TagFrame(ifstream& f, const string& neededTagID, string* output);
             int readFLACMetadataBlock(ifstream& f, const string& neededBlockType, string* output);
         #endif
@@ -91,9 +91,10 @@ class Library{
         json libJson;
         string libPath;
         json remoteLibJson;
+        bool permsObtained;
 
         Library(){
-            //Artists = new vector<Artist>();
+            permsObtained = false;
         }
         void jsonBuild();
         int addToLibrary(string name, string dirPath);
@@ -110,7 +111,7 @@ class Library{
         void printData();
         void displayData();
     private:
-        int createNewFile(string path);
+        int createNewFile(string path, string fName);
 
 };
 

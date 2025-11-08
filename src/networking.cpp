@@ -1,7 +1,6 @@
 #include "networking.h"
-#include "config.h"
-#include <cstdint>
 
+#if defined (PLATFORM_LINUX) || defined (PLATFORM_WINDOWS)
 using asio::ip::tcp;
 
 namespace {
@@ -221,3 +220,5 @@ void requestTrack(string requestPath, ofstream* fileOutput){
     // send req, read size, malloc the size, read to the mem ptr, write from mem to fileptr
     
 }
+
+#endif
