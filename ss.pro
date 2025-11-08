@@ -14,8 +14,8 @@ INCLUDEPATH += .
 #DEFINES += QT_DISABLE_DEPRECATED_BEFORE=0x060000    # disables all the APIs deprecated before Qt 6.0.0
 
 # Input
-HEADERS += src/app.h src/config.h src/gui.h src/library.h src/sys_headers.h src/networking.h
-SOURCES += src/app.cpp src/gui.cpp src/library.cpp src/networking.cpp
+HEADERS += src/app.h src/config.h src/gui.h src/library.h src/sys_headers.h src/networking.h src/android_compat.h
+SOURCES += src/app.cpp src/gui.cpp src/library.cpp src/networking.cpp src/networking_android.cpp src/android_compat.cpp
 CONFIG += c++20
 
 QMAKE_CXXFLAGS += -Wall -Wextra -Werror -Wpointer-arith -Wcast-qual \
@@ -24,8 +24,17 @@ QMAKE_CXXFLAGS += -Wall -Wextra -Werror -Wpointer-arith -Wcast-qual \
              -pedantic-errors -pedantic \
              -Os -std=c++20
 
+
+# Windows compilation flags
+# To be generated with mingw32.static-qmake-qt5
+
+#QMAKE_LFLAGS += -static
+#CONFIG += console
+#LIBS += -lws2_32 -lmswsock
+
 QT += widgets
 QT += concurrent
+QT += network
 
 # Place all object files in obj/
 OBJECTS_DIR = obj
