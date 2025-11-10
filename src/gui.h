@@ -40,9 +40,9 @@ class WindowGUI : public QMainWindow  {
     private:
         QWidget* mainBox;
         Library* localLibrary;
-        QFutureWatcher<void> watcher;
+        QFutureWatcher<int> watcher;
 
-        void connClientCallback();
+        void connCallback(int connState);
         void ChangeLblText(string text);
         void showDirSelect();
         void changeOpMode();

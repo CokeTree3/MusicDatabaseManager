@@ -130,18 +130,18 @@ private:
     tcp::socket socket_;
 };
 
-void initConn(json* jsonData, string addr) {
+int initConn(json* jsonData, string addr) {
     if(serverMode){
         // init server worker
         cout << "server run\n";
         try {
-          asio::io_context io_context;
-          server s(io_context, (unsigned short)CONNECT_PORT, jsonData);
-          io_context.run();
+            asio::io_context io_context;
+            server s(io_context, (unsigned short)CONNECT_PORT, jsonData);
+            io_context.run();
 
         } catch (std::exception &e) {
-          cout << "net error " << e.what() << endl;
-          return;
+            cout << "net error " << e.what() << endl;
+            return 1;
         }
 
     }else{
@@ -181,8 +181,10 @@ void initConn(json* jsonData, string addr) {
 
         }catch (std::exception &e){
             cout << "net error " << e.what() << endl;
+            return 1;
         }
     }
+    return 0;
 }
 
 void requestTrack(string requestPath, ofstream* fileOutput){

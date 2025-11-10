@@ -8,8 +8,7 @@
 #define RQ_SYNC     "SRQ"
 #define RQ_GET      "GET"
 
-
-void initConn(json* jsonData, string addr = "127.0.0.1");
+int initConn(json* jsonData, string addr = "127.0.0.1");
 
 
 #if defined (PLATFORM_LINUX) || defined (PLATFORM_WINDOWS)

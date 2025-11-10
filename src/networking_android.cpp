@@ -57,11 +57,11 @@ void readData(void* dataBuf, uint64_t dataSize){
     }
 }
 
-void initConn(json* jsonData, string addr) {
+int initConn(json* jsonData, string addr) {
     if(serverMode){
         // init server worker
         cout << "Server operation not supported\n";
-        
+        return 1;
     }else{
         // init connection
         cout << "client run\n";
@@ -101,8 +101,10 @@ void initConn(json* jsonData, string addr) {
 
         }catch (std::exception &e){
             cout << "net error " << e.what() << endl;
+            return 1;
         }
     }
+    return 0;
 }
 
 void requestTrack(string requestPath, vector<char>& fileData){

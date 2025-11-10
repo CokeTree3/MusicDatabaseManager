@@ -752,7 +752,6 @@ json Track::getJsonStructure(){
         }else{
             data["1Name"] = this->name;
         }
-        //data["1Name"] = this->name;
     }catch(...){
         cout << this->name << "BADBAD" << endl;
     }
@@ -801,7 +800,7 @@ int Track::readFLACMetadataBlock(ifstream& f, const string& neededBlockType, str
     
     if((header[0] & 0x7F) != 4){
         if(header[0] & 0x80){
-            cout << "FLAC file does not contain title information" << endl;
+            cout << "FLAC file does not contain information: " + neededBlockType << endl;
             return 1;
         }
         f.ignore(blockSize);
