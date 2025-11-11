@@ -68,6 +68,14 @@ WindowGUI::WindowGUI(QWidget* parent) :QMainWindow(parent) {
     connect(&watcher, &QFutureWatcher<int>::finished, this, [this]{WindowGUI::connCallback(watcher.result());});
 }
 
+WindowGUI::~WindowGUI(){
+    if(localLibrary != nullptr){
+        if(localLibrary->serverActive){                                 // server needs to be stopped
+            stopServer();
+        }
+    }
+}
+
 void WindowGUI::ChangeLblText(string text) {
     cout << "edit to " << text << endl;
 }
@@ -115,8 +123,8 @@ void WindowGUI::startSyncFunc(){
             });
             watcher.setFuture(future);
 #elif defined (PLATFORM_ANDROID)                                                                    // Add multithreading support when QNetwork is used (QFuture not supported)
-            initConn(&localLibrary->remoteLibJson,  remoteAddr);
-            connCallback();
+            int ret = initConn(&localLibrary->remoteLibJson,  remoteAddr);
+            connCallback(ret);
 #endif
         }
     }
@@ -127,18 +135,21 @@ void WindowGUI::startSyncFunc(){
         btn->setText("Stop Server");
 
         disconnect(btn, &QPushButton::clicked, this, &WindowGUI::startSyncFunc);
-        connect(btn, &QPushButton::clicked, this, [this]{cout << "Feature not implemented" << endl; });
+        connect(btn, &QPushButton::clicked, this, &stopServer);
 
         QVBoxLayout* layout = (QVBoxLayout*)centralWidget()->layout();
         QLabel* syncLbl = new QLabel("server operational...");
         layout->addWidget(syncLbl, 0, Qt::AlignRight);
 
+        localLibrary->serverActive = true;
+
         QFuture<int> future = QtConcurrent::run([this]() {
-            json dat = localLibrary->libJson;
-            return initConn(&dat);
+            return initConn(&localLibrary->libJson);
         });
         watcher.setFuture(future);
-#elif
+        //int ret = initConn(&localLibrary->remoteLibJson,  remoteAddr);
+        //connCallback(ret);
+#elif defined (PLATFORM_ANDROID)    
         cout << "Server operations not supported on current platform!\n";
         QMessageBox::information(this, "Warning", "Server operations not supported on current platform!");
 
@@ -206,13 +217,17 @@ void WindowGUI::connCallback(int connState){
             this->setMainWindowContent();
         }   
         
-        
     }else{
+        localLibrary->serverActive = false;
         if(connState > 0){
             QMessageBox::information(this, "Warning", "Server Error!");
         }
-        QPushButton* btn = qobject_cast<QPushButton*>(this->centralWidget()->layout()->itemAt(this->centralWidget()->layout()->count() - 1)->widget());
+        QPushButton* btn = qobject_cast<QPushButton*>(this->centralWidget()->layout()->itemAt(this->centralWidget()->layout()->count() - 2)->widget());
         btn->setText("Start Server");
+
+        disconnect(btn, &QPushButton::clicked, this, nullptr);
+        connect(btn, &QPushButton::clicked, this, &WindowGUI::startSyncFunc);
+        
     }
 
     QVBoxLayout* layout = (QVBoxLayout*)centralWidget()->layout();

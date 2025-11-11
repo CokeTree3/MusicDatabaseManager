@@ -31,6 +31,7 @@ class WindowGUI : public QMainWindow  {
 
     public:
         WindowGUI(QWidget *parent = nullptr);
+        ~WindowGUI();
 
         void setMainWindowContent();
         void setMainWindowContent(Library* library, string dispText = "Local Library");

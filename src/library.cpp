@@ -51,7 +51,12 @@ void makeDir(string absolutePath){                                          // D
 *   Library Class Functions
 */
 int Library::buildLibrary(string searchDir){
-    if(searchDir == ""){
+    if(searchDir == "" || !filesystem::exists(searchDir)){
+        cout << "Incorrect library path!" << endl;
+        return 1;
+    }
+    if(serverActive){
+        cout << "This library is currently used by an active server thread!/n Action not permitted!" << endl;
         return 1;
     }
     libPath = searchDir;
@@ -83,6 +88,10 @@ int Library::buildLibrary(string searchDir){
 }
 
 void Library::jsonBuild(){
+    if(serverActive){
+        cout << "This library is currently used by an active server thread!/n Action not permitted!" << endl;
+        return;
+    }
     ofstream s("library.json", ios::binary);
 
     size_t count = artistList.size();
@@ -100,13 +109,20 @@ void Library::jsonBuild(){
 }
 
 int Library::jsonRead(){
+    if(serverActive){
+        cout << "This library is currently used by an active server thread!/n Action not permitted!" << endl;
+        return 1;
+    }
     string libFile = "library.json";
 
     if(access( libFile.c_str(), F_OK ) != -1){
         ifstream f(libFile, ios::binary);
         json data = json::parse(f);
         f.close();
-        if(buildLibrary(data["LibraryPath"])) return 1;
+        if(buildLibrary(data["LibraryPath"])){
+            libSet = false;
+            return 1;
+        }
         libSet = true;
         return 0;
 
@@ -122,6 +138,10 @@ int Library::jsonRead(){
 }
 
 int Library::buildFromJson(json jsonSource){
+    if(serverActive){
+        cout << "This library is currently used by an active server thread!/n Action not permitted!" << endl;
+        return 1;
+    }
     if(!jsonSource.contains("Artists")) return 1;
     this->libJson = jsonSource;
     this->libPath = "";
@@ -228,6 +248,7 @@ int Library::syncWithServer(){
                                     for(size_t k = 0; k < this->artistList[i]->albumList[j]->trackList.size(); k++){                // Mignt not be needed as the Diff will only contain tracks that need downloading or removing
                                         
                                         if(this->artistList[i]->albumList[j]->trackList[k]->name == string(trackJson["1Name"])){    // Matches will never be found
+                                            cout << "bad!!" << endl;
                                             trackFound = true;
                                         }
                                         
@@ -283,7 +304,12 @@ int Library::createNewFile(string path, string fName){
         return 1;
     }
     string relativePath = string(path+fName).substr(libPath.length());
-    requestTrack(relativePath, &trackFile);
+
+    vector<char> buf;
+
+    requestTrack(relativePath, buf);
+
+    trackFile.write(buf.data(), buf.size());
 
     trackFile.close();
     return 0;
@@ -296,7 +322,7 @@ int Library::createNewFile(string path, string fName){
     string relativePath = path.substr(libPath.length() + 1);
 
     if(!permsObtained){
-        //requestPermissions();
+        requestPermissions();
     }
     vector<char> buf;
     string relativePathWName = string(path+fName).substr(libPath.length());

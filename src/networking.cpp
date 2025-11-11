@@ -3,40 +3,30 @@
 #if defined (PLATFORM_LINUX) || defined (PLATFORM_WINDOWS)
 using asio::ip::tcp;
 
-namespace {
-    asio::io_context io_context;
-    std::unique_ptr<tcp::socket> sock;
-}
-
-void sendData(tcp::socket *socket, const void *data, uint64_t dataSize, error_code &ec) {
+void sendData(tcp::socket *socket, const void *data, uint64_t dataSize, error_code& ec) {
     uint64_t request_length = htonl(dataSize);
 
     vector<asio::const_buffer> dataBuf;
     dataBuf.push_back(asio::buffer(&request_length, sizeof(request_length)));           // size_t writes diff data on win vs linux
     dataBuf.push_back(asio::buffer(data, dataSize));
     asio::write(*socket, dataBuf, ec);
-
-    if(ec) throw ec;
 }
 
-void readDataSize(tcp::socket *socket, uint64_t* dataSize, error_code &ec){
+void readDataSize(tcp::socket *socket, uint64_t* dataSize, error_code& ec){
     asio::read(*socket, asio::buffer(dataSize, sizeof(*dataSize)), ec);
     if(!ec) {
         uint64_t sizeConverted = ntohl(*dataSize);
         *dataSize = sizeConverted;
-    }else {
-        throw ec;
     }
 }
 
-void readData(tcp::socket *socket, void* dataBuf, uint64_t dataSize, error_code &ec){
+void readData(tcp::socket *socket, void* dataBuf, uint64_t dataSize, error_code& ec){
     uint64_t readSize = 0;
     readSize = asio::read(*socket, asio::buffer(dataBuf, dataSize), ec);
 
     if (readSize < dataSize){
         cout << "not enough\n";
     }
-    if(ec) throw ec;
 }
 
 
@@ -52,25 +42,26 @@ public:
 
 private:
     void do_read(){
-
-        uint64_t recvSize = 0;
-        asio::error_code ec;
         while(true){
+            uint64_t recvSize = 0;
+            error_code ec;
             readDataSize(&socket_, &recvSize, ec);
-            if (recvSize > 16384){
-                sendData(&socket_, (const void*)RESP_ERR, sizeof(RESP_ERR), ec);
-                continue;
+            if(ec == asio::error::eof || ec == asio::error::connection_reset){
+                cout << "Conn closed" << endl;
+                break;
+            }else if(ec){
+                cout << "Server Error!!\n" << ec.message() << endl;
+                break;
             }
             string recvBuf(recvSize, '\0');
             readData(&socket_, recvBuf.data(), recvSize, ec);
-
             if(!ec) {
                 if(recvBuf[0] == 'S' && recvBuf[1] == 'R' && recvBuf[2] == 'Q') {                               // SYNC request
-                    cout << "received a JSON request\n";
+                    cout << "received a JSON request" << endl;
+                    cout << jsonData->is_object() << " sada" << endl;
                     vector<uint8_t> jsonToSend = json::to_bson(*jsonData);
-                    void* data = jsonToSend.data();
 
-                    sendData(&socket_, data, jsonToSend.size(), ec);
+                    sendData(&socket_, jsonToSend.data(), jsonToSend.size(), ec);
 
                 }else if(recvBuf[0] == 'G' && recvBuf[1] == 'E' && recvBuf[2] == 'T'){                          // GET request
                     
@@ -95,14 +86,17 @@ private:
                     cout << "server received: \n";
                     cout << recvBuf << endl;
                     sendData(&socket_, static_cast<const void*>(RESP_ERR), sizeof(RESP_ERR), ec);
+                    break;
                 }
             }else if(ec == asio::error::eof || ec == asio::error::connection_reset){
                 cout << "Conn closed\n";
                 break;
             }else{
-                throw ec;
+                cout << "Server Error!!\n" << ec.message() << endl;
+                break;
             }
         }
+        socket_.close();
     }
     tcp::socket socket_;
     json* jsonData;
@@ -112,23 +106,41 @@ class server {
 public:
     server(asio::io_context &io_context, short port, json* jsonData)
           : acceptor_(io_context, tcp::endpoint(tcp::v4(), port)), socket_(io_context) {
-        do_accept(jsonData);
+        this->jsonData = jsonData;
+        do_accept();
+    }
+
+    void server_stop(){
+        error_code ec;
+        acceptor_.close(ec);
+        if(ec){
+            cout << "net error closing connection: " << ec.message() << endl;
+        }
     }
 
 private:
-    void do_accept(json* jsonData) {
-        acceptor_.async_accept(socket_, [this, &jsonData](std::error_code ec) {
+    void do_accept() {
+        acceptor_.async_accept(socket_, [this](std::error_code ec) {
             if(!ec){
                 std::make_shared<session>(std::move(socket_))->start(jsonData);
             }
-
-            do_accept(jsonData);
+            if(acceptor_.is_open()){
+                do_accept();                
+            }
         });
     }
 
     tcp::acceptor acceptor_;
     tcp::socket socket_;
+    json* jsonData;
 };
+
+
+namespace {
+    asio::io_context io_context;
+    std::unique_ptr<tcp::socket> sock;
+    server* server_;
+}
 
 int initConn(json* jsonData, string addr) {
     if(serverMode){
@@ -137,10 +149,14 @@ int initConn(json* jsonData, string addr) {
         try {
             asio::io_context io_context;
             server s(io_context, (unsigned short)CONNECT_PORT, jsonData);
+            server_ = &s;
             io_context.run();
 
         } catch (std::exception &e) {
             cout << "net error " << e.what() << endl;
+            return 1;
+        }catch (...){
+            cout << "Network error: unknown! " << endl;
             return 1;
         }
 
@@ -179,16 +195,19 @@ int initConn(json* jsonData, string addr) {
             
             free(jsonBuf);
 
-        }catch (std::exception &e){
+        }catch (exception &e){
             cout << "net error " << e.what() << endl;
+            return 1;
+        }catch (...){
+            cout << "Network error: unknown! " << endl;
             return 1;
         }
     }
     return 0;
 }
 
-void requestTrack(string requestPath, ofstream* fileOutput){
-    if(!fileOutput->is_open() || !sock->is_open()){
+void requestTrack(string requestPath, vector<char>& fileData){
+    if(/*!fileOutput->is_open() || */!sock->is_open()){
         return;
     }
     cout << "requesting " << requestPath << endl;
@@ -209,7 +228,9 @@ void requestTrack(string requestPath, ofstream* fileOutput){
                 cout << "Error requesting file " << requestPath << endl;
             }
             else{
-                fileOutput->write(static_cast<char*>(fileBuf), fileSize);
+                fileData.resize(fileSize);
+                memcpy(fileData.data(), fileBuf, fileSize);
+                //fileOutput->write(static_cast<char*>(fileBuf), fileSize);
             }
             
             free(fileBuf);
@@ -221,6 +242,13 @@ void requestTrack(string requestPath, ofstream* fileOutput){
     
     // send req, read size, malloc the size, read to the mem ptr, write from mem to fileptr
     
+}
+
+void stopServer(){
+    if(server_ != nullptr){
+        server_->server_stop();
+        io_context.stop();
+    }
 }
 
 #endif

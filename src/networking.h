@@ -9,16 +9,14 @@
 #define RQ_GET      "GET"
 
 int initConn(json* jsonData, string addr = "127.0.0.1");
-
+void requestTrack(string requestPath, vector<char>& fileData);
 
 #if defined (PLATFORM_LINUX) || defined (PLATFORM_WINDOWS)
 
 #define ASIO_STANDALONE
 #include <asio/asio.hpp>
 
-
-
-void requestTrack(string requestPath, ofstream* fileOutput);
+void stopServer();
 
 #endif
 
@@ -27,10 +25,6 @@ void requestTrack(string requestPath, ofstream* fileOutput);
 #include <QTcpSocket>
 #include <arpa/inet.h>
 #include <QByteArray>
-
-
-
-void requestTrack(string requestPath, vector<char>& fileBuf);
 
 #endif
 

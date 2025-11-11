@@ -92,9 +92,11 @@ class Library{
         string libPath;
         json remoteLibJson;
         bool permsObtained;
+        bool serverActive;
 
         Library(){
             permsObtained = false;
+            serverActive = false;
         }
         void jsonBuild();
         int addToLibrary(string name, string dirPath);
