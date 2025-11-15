@@ -1,5 +1,4 @@
 #include "gui.h"
-#include "qobject.h"
 
 void deleteQWidgetFromLayout(QLayout* layout, int indexInLayout){
     QLayoutItem* item = layout->takeAt(indexInLayout);
@@ -68,13 +67,21 @@ WindowGUI::WindowGUI(QWidget* parent) :QMainWindow(parent) {
     connect(&watcher, &QFutureWatcher<int>::finished, this, [this]{WindowGUI::connCallback(watcher.result());});
 }
 
+#if defined (PLATFORM_LINUX) || defined (PLATFORM_WINDOWS)
 WindowGUI::~WindowGUI(){
     if(localLibrary != nullptr){
-        if(localLibrary->serverActive){                                 // server needs to be stopped
+        if(localLibrary->serverActive){
             stopServer();
         }
     }
 }
+#else
+WindowGUI::~WindowGUI(){
+    if(localLibrary != nullptr){
+        // more graceful networking stop
+    }
+}
+#endif
 
 void WindowGUI::ChangeLblText(string text) {
     cout << "edit to " << text << endl;
@@ -206,7 +213,7 @@ void WindowGUI::connCallback(int connState){
             localLibrary->syncWithServer();
             cout << "sync finished\n";
             
-            localLibrary->resetLibrary();       
+            /*localLibrary->resetLibrary();       
             localLibrary->jsonRead();                                           // Not needed if new(synced) data is already added to lib(not yet implemented)
 
             if(mainBox->layout()->count() > 1){                                 // reloads whole window instead of adding the new entries(even if no change to library)
@@ -214,7 +221,7 @@ void WindowGUI::connCallback(int connState){
                     deleteQWidgetFromLayout(mainBox->layout(), i);
                 }
             }
-            this->setMainWindowContent();
+            this->setMainWindowContent();*/
         }   
         
     }else{
@@ -227,7 +234,6 @@ void WindowGUI::connCallback(int connState){
 
         disconnect(btn, &QPushButton::clicked, this, nullptr);
         connect(btn, &QPushButton::clicked, this, &WindowGUI::startSyncFunc);
-        
     }
 
     QVBoxLayout* layout = (QVBoxLayout*)centralWidget()->layout();

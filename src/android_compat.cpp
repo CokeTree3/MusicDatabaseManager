@@ -20,9 +20,19 @@ void requestPermissions(){
 */
 
 int createFileAndroid(string fileName, string relativePath, void* dataBuf, uint64_t dataBufSize){
+    string type = fName.substr(fName.rfind('.') + 1, fName.npos);
+    QString fileType;
 
-    QString fileType = "audio/mpeg";
-    // Change type based on filetype(mp3/flac/other)
+    switch (type) {
+    case "mp3":
+        fileType = "audio/mpeg";
+        break;
+    case "flac":
+        fileType = "audio/flac";
+        break;
+    default:
+        return 1;
+    }
 
     QAndroidJniEnvironment env;
     QAndroidJniObject activity = QtAndroid::androidActivity();
