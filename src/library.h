@@ -134,7 +134,9 @@ class Library{
 
         int jsonRead();
 
-        int find_diff(Library* remoteLib, json* jsonDiff);
+        int findDiff(Library* remoteLib, json* jsonDiff);
+        int generateDiff(Library &diffLib);
+        int implementDiff(Library &diffLib);
         int syncWithServer();
 
         void printData();

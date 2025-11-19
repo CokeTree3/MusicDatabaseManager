@@ -20,17 +20,14 @@ void requestPermissions(){
 */
 
 int createFileAndroid(string fileName, string relativePath, void* dataBuf, uint64_t dataBufSize){
-    string type = fName.substr(fName.rfind('.') + 1, fName.npos);
+    string type = fileName.substr(fileName.rfind('.') + 1, fileName.npos);
     QString fileType;
-
-    switch (type) {
-    case "mp3":
+    
+    if(type == "mp3"){
         fileType = "audio/mpeg";
-        break;
-    case "flac":
+    }else if(type == "flac"){
         fileType = "audio/flac";
-        break;
-    default:
+    }else{
         return 1;
     }
 

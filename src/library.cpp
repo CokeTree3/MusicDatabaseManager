@@ -40,9 +40,9 @@ int createNewFileNew(string path, string fName, string libPath){
 int createNewFileNew(string path, string fName, string libPath){
     string relativePath = path.substr(libPath.length() + 1);
 
-    if(!permsObtained){
+    //if(!permsObtained){                                           // permsObtained is a Library element, this func isnt part of Library anymore, needs a fix
         requestPermissions();
-    }
+    //}
     vector<char> buf;
     string relativePathWName = string(path+fName).substr(libPath.length());
     requestTrack(relativePathWName, buf);
@@ -207,7 +207,7 @@ int Library::buildFromJson(json jsonSource){
     return 0;
 }
 
-int Library::find_diff(Library* remoteLib, json* jsonDiff){
+int Library::findDiff(Library* remoteLib, json* jsonDiff){
     (*jsonDiff)["Artists"] = json::array({});
     vector<bool> markList(remoteLib->artistList.size(), false);
     for(size_t i = 0; i < this->artistList.size(); i++){
@@ -243,7 +243,7 @@ int Library::find_diff(Library* remoteLib, json* jsonDiff){
     return 0;
 }
 
-int Library::syncWithServer(){
+int Library::generateDiff(Library &diffLib){
     if(remoteLibJson.empty()){
         cout << "Could not obtain server library file!\nRetry connection\n";
         return 1;
@@ -253,20 +253,28 @@ int Library::syncWithServer(){
     Library serverLib;
 
     serverLib.buildFromJson(remoteLibJson);
-    serverLib.find_diff(this, &diff);
+    serverLib.findDiff(this, &diff);
 
     if(diff.empty()){
         return 1;
     }
 
-    // return to GUI and display the sync selection
-
     ofstream f("libDiff.json", ios::binary);
     f << setw(4) << diff;
     f.close();
 
+    return diffLib.buildFromJson(diff);
+}
+
+int Library::syncWithServer(){
     Library diffLib;
-    diffLib.buildFromJson(diff);
+    if(generateDiff(diffLib) == 1){
+        return 1;
+    }
+    return implementDiff(diffLib);
+}
+
+int Library::implementDiff(Library &diffLib){
 
     cout << "starting fs operations\n";
     for(size_t i = 0; i < diffLib.artistList.size(); i++){

@@ -33,8 +33,10 @@ WindowGUI::WindowGUI(QWidget* parent) :QMainWindow(parent) {
     fileMenu->addAction(quit);
 
     auto *changeText = new QAction("&Update Text", this);
+    auto *tempSel = new QAction("&exec", this);
     QMenu *editMenu = menuBar()->addMenu("&Edit");
     editMenu->addAction(changeText);
+    editMenu->addAction(tempSel);
 
     QPushButton *syncBtn = new QPushButton("Start Sync", this);
     QLabel* noLibraryNotification = new QLabel("No Library found, please set a path to a valid library in File menu!");
@@ -62,6 +64,8 @@ WindowGUI::WindowGUI(QWidget* parent) :QMainWindow(parent) {
     connect(quit, &QAction::triggered, qApp, QApplication::quit);
     connect(libraryPath, &QAction::triggered, this, &WindowGUI::showDirSelect);
     connect(opModeSelect, &QAction::triggered, this, &WindowGUI::changeOpMode);
+
+    //connect(tempSel, &QAction::triggered, this, &WindowGUI::showSyncSelection);
 
     connect(syncBtn, &QPushButton::clicked, this, &WindowGUI::startSyncFunc);
     connect(&watcher, &QFutureWatcher<int>::finished, this, [this]{WindowGUI::connCallback(watcher.result());});
@@ -210,20 +214,36 @@ void WindowGUI::connCallback(int connState){
             // popup for sync selection
 
             cout << "calling sync\n";
-            localLibrary->syncWithServer();
-            cout << "sync finished\n";
-            
-            /*localLibrary->resetLibrary();       
-            localLibrary->jsonRead();                                           // Not needed if new(synced) data is already added to lib(not yet implemented)
+            Library diffLib;
+            if(localLibrary->generateDiff(diffLib) == 1){
+                cout << "Error synchronizing with the server!" << endl;
+                QMessageBox::information(this, "Error", "Failed synchronizing data with the server!");
+                goto syncDone;
+            }
+            if(diffLib.artistList.empty()){
+                cout << "Library is up to date" << endl;
+                QMessageBox::information(this, "Info", "The local library is up to date!");
+                goto syncDone;
+            }
+
+            showSyncSelection(diffLib);
+
+            if(diffLib.permsObtained){         // Skip if the selection window was closed manually, callback wasn't called
+                if(localLibrary->implementDiff(diffLib) == 1){
+                    cout << "Error synchronizing data with the server!" << endl;
+                    QMessageBox::information(this, "Error", "Failed implementing the server sync data!");
+                }
+                cout << "sync finished\n";
+            }
 
             if(mainBox->layout()->count() > 1){                                 // reloads whole window instead of adding the new entries(even if no change to library)
                 for(int i = mainBox->layout()->count()-1; i >= 0; i--){
                     deleteQWidgetFromLayout(mainBox->layout(), i);
                 }
             }
-            this->setMainWindowContent();*/
-        }   
-        
+            this->setMainWindowContent();
+            
+        }
     }else{
         localLibrary->serverActive = false;
         if(connState > 0){
@@ -236,9 +256,140 @@ void WindowGUI::connCallback(int connState){
         connect(btn, &QPushButton::clicked, this, &WindowGUI::startSyncFunc);
     }
 
+    syncDone:
+
     QVBoxLayout* layout = (QVBoxLayout*)centralWidget()->layout();
     deleteQWidgetFromLayout(layout, layout->count() - 1);
-    // update GUI
+}
+
+void WindowGUI::showSyncSelection(Library &diffLib){
+
+    cout << "DiffLib has: " << diffLib.artistList.size() << " artists" << endl;
+
+    QDialog* syncSelectWindow = new QDialog(this);
+    syncSelectWindow->setWindowFlags(Qt::Tool);
+    syncSelectWindow->setModal(true);
+    syncSelectWindow->setWindowTitle("Select What to Synchronize");
+
+    vector<QCheckBox*> checkBoxList;
+
+    auto* outerBoxLayout = new QVBoxLayout(syncSelectWindow);
+
+    QTreeWidget* selectionTree = new QTreeWidget(syncSelectWindow);
+    
+    selectionTree->setHeaderHidden(true);
+    selectionTree->setColumnCount(2);
+    selectionTree->setSizePolicy(QSizePolicy::Expanding, QSizePolicy::Expanding);
+    selectionTree->setHorizontalScrollBarPolicy(Qt::ScrollBarAlwaysOff);
+
+    QPushButton* selectBtn = new QPushButton("Select");
+
+    connect(selectBtn, &QPushButton::clicked, syncSelectWindow, [this, &syncSelectWindow, &diffLib, &selectionTree]{
+        WindowGUI::syncSelectionCallback(diffLib, selectionTree);
+        syncSelectWindow->accept();
+        });
+
+    outerBoxLayout->addWidget(selectionTree, 1);
+    outerBoxLayout->addWidget(selectBtn, 0);
+    syncSelectWindow->setLayout(outerBoxLayout);
+
+    QHeaderView *h = selectionTree->header();
+    h->setSectionResizeMode(0, QHeaderView::ResizeToContents);
+    h->setSectionResizeMode(1, QHeaderView::ResizeToContents);
+    h->setStretchLastSection(false);
+
+    for(size_t i = 0; i < diffLib.artistList.size(); i++){
+        QTreeWidgetItem* artistLine = new QTreeWidgetItem(selectionTree);
+
+        artistLine->setFlags(artistLine->flags() | Qt::ItemIsAutoTristate);
+        setUpSelectionTreeItemLine(artistLine, QString::fromStdString(diffLib.artistList[i]->name), diffLib.artistList[i]->toBeRemoved);
+        bool albumRemoved = false;
+
+        for(size_t j = 0; j < diffLib.artistList[i]->albumCount; j++){
+            QTreeWidgetItem* albumLine = new QTreeWidgetItem(artistLine);
+
+            albumLine->setFlags(albumLine->flags() | Qt::ItemIsAutoTristate);
+            setUpSelectionTreeItemLine(albumLine, QString::fromStdString(diffLib.artistList[i]->albumList[j]->name), diffLib.artistList[i]->albumList[j]->toBeRemoved);
+            bool trackRemoved = false;
+
+            if(diffLib.artistList[i]->albumList[j]->toBeRemoved){
+                albumRemoved = true;
+            }
+            for(size_t k = 0; k < diffLib.artistList[i]->albumList[j]->trackCount; k++){
+                QTreeWidgetItem* trackLine = new QTreeWidgetItem(albumLine);
+                
+                setUpSelectionTreeItemLine(trackLine, QString::fromStdString(diffLib.artistList[i]->albumList[j]->trackList[k]->name), diffLib.artistList[i]->albumList[j]->trackList[k]->toBeRemoved);
+                if(diffLib.artistList[i]->albumList[j]->trackList[k]->toBeRemoved){
+                    trackRemoved = true;
+                }
+            }
+
+            if(trackRemoved){
+                albumLine->setText(1,"Track being Removed!");
+                QFont font;
+                font.setBold(true);
+                albumLine->setFont(1, font);
+                albumRemoved = true;
+            }
+        }
+
+        if(albumRemoved){
+            artistLine->setText(1,"Album being Removed!");
+            QFont font;
+            font.setBold(true);
+            artistLine->setFont(1, font);
+        }
+    }
+    
+    selectionTree->expandAll();
+    selectionTree->resizeColumnToContents(0);
+    selectionTree->resizeColumnToContents(1);
+    selectionTree->collapseAll();
+
+    syncSelectWindow->exec();
+    
+}
+
+void WindowGUI::setUpSelectionTreeItemLine(QTreeWidgetItem* line, QString name, bool toRemove){
+    line->setText(0, name);
+    line->setCheckState(0, Qt::Checked);
+    line->setFlags(line->flags() | Qt::ItemIsUserCheckable);
+    if(toRemove){
+        line->setText(1,"To Remove!");
+        QFont font;
+        font.setBold(true);
+        line->setFont(1, font);
+    }
+}
+
+void WindowGUI::syncSelectionCallback(Library& diffLib, QTreeWidget* selectionList){
+    QTreeWidgetItemIterator it(selectionList);
+
+    diffLib.permsObtained = true;
+
+    for(size_t i = 0; i < diffLib.artistList.size(); i++){
+        if(*it && (*it)->checkState(0) == Qt::Unchecked){
+            cout << diffLib.artistList[i]->name << " Artist is unchecked and removed from diff" << endl;
+            diffLib.removeFromLibrary(diffLib.artistList[i]->name, i);
+            continue;
+        }
+        ++it;
+        for(size_t j = 0; j < diffLib.artistList[i]->albumCount; j++){
+            if(*it && (*it)->checkState(0) == Qt::Unchecked){
+                cout << diffLib.artistList[i]->albumList[j]->name << " Album is unchecked and removed from diff" << endl;
+                diffLib.artistList[i]->removeAlbum(diffLib.artistList[i]->albumList[j]->name, j);
+                continue;
+            }
+            ++it;
+            for(size_t k = 0; k < diffLib.artistList[i]->albumList[j]->trackCount; k++){
+                if(*it && (*it)->checkState(0) == Qt::Unchecked){
+                    cout << diffLib.artistList[i]->albumList[j]->trackList[k]->name << " Track is unchecked and removed from diff" << endl;
+                    diffLib.artistList[i]->albumList[j]->removeTrack(diffLib.artistList[i]->albumList[j]->trackList[k]->name, k);
+                }
+                ++it;
+            }
+        }
+    }
 }
 
 void WindowGUI::setMainWindowContent(){

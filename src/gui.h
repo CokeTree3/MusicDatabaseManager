@@ -1,4 +1,5 @@
 
+#include "qtreewidget.h"
 #include "sys_headers.h"
 #include "networking.h"
 #include "library.h"
@@ -19,6 +20,11 @@
 #include <QFileDialog>
 #include <QtConcurrent>
 #include <QFuture>
+#include <QCheckBox>
+#include <QDialog>
+#include <QTreeWidget>
+#include <QTreeWidgetItem>
+#include <QHeaderView>
 
 
 
@@ -48,6 +54,9 @@ class WindowGUI : public QMainWindow  {
         void showDirSelect();
         void changeOpMode();
         void startSyncFunc();
+        void showSyncSelection(Library &diffLib);
+        void syncSelectionCallback(Library& diffLib, QTreeWidget* selectionList);
+        void setUpSelectionTreeItemLine(QTreeWidgetItem* line, QString name, bool toRemove);
 };
 
 
