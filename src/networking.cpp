@@ -58,7 +58,6 @@ private:
             if(!ec) {
                 if(recvBuf[0] == 'S' && recvBuf[1] == 'R' && recvBuf[2] == 'Q') {                               // SYNC request
                     cout << "received a JSON request" << endl;
-                    cout << jsonData->is_object() << " sada" << endl;
                     vector<uint8_t> jsonToSend = json::to_bson(*jsonData);
 
                     sendData(&socket_, jsonToSend.data(), jsonToSend.size(), ec);

@@ -15,7 +15,7 @@ void deleteQWidgetFromLayout(QLayout* layout, int indexInLayout){
 
 WindowGUI::WindowGUI(QWidget* parent) :QMainWindow(parent) {
     resize(500, 500);
-    setWindowTitle("Hello Qt :)");
+    setWindowTitle("Music Database Manager");
 
     QWidget* mainWindowBox = new QWidget(this);
     setCentralWidget(mainWindowBox);
@@ -37,6 +37,13 @@ WindowGUI::WindowGUI(QWidget* parent) :QMainWindow(parent) {
     QMenu *editMenu = menuBar()->addMenu("&Edit");
     editMenu->addAction(changeText);
     editMenu->addAction(tempSel);
+
+    auto *changeRemoveStatusSelect = new QAction("&Allow removing local tracks", this);
+    changeRemoveStatusSelect->setCheckable(true);
+
+    QMenu *settingsMenu = menuBar()->addMenu("&Settings");
+    settingsMenu->addAction(changeRemoveStatusSelect);
+
 
     QPushButton *syncBtn = new QPushButton("Start Sync", this);
     QLabel* noLibraryNotification = new QLabel("No Library found, please set a path to a valid library in File menu!");
@@ -64,6 +71,7 @@ WindowGUI::WindowGUI(QWidget* parent) :QMainWindow(parent) {
     connect(quit, &QAction::triggered, qApp, QApplication::quit);
     connect(libraryPath, &QAction::triggered, this, &WindowGUI::showDirSelect);
     connect(opModeSelect, &QAction::triggered, this, &WindowGUI::changeOpMode);
+    connect(changeRemoveStatusSelect, &QAction::triggered, this, &WindowGUI::changeRemoveStatus);
 
     //connect(tempSel, &QAction::triggered, this, &WindowGUI::showSyncSelection);
 
@@ -111,6 +119,16 @@ void WindowGUI::changeOpMode(){
     serverMode = !serverMode;
 }
 
+void WindowGUI::changeRemoveStatus(){
+    if(!libSet){
+        (qobject_cast<QAction*>(sender()))->setChecked(false);
+        QMessageBox::warning( this, tr("Error"), tr("Please set the local library path first!"));
+        return;
+    }
+
+    cout << "Not yet implemented!" << endl;                             // TODO implement the switch, variable in library not gui
+
+}
 
 
 void WindowGUI::startSyncFunc(){

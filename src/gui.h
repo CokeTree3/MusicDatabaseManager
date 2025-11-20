@@ -57,6 +57,8 @@ class WindowGUI : public QMainWindow  {
         void showSyncSelection(Library &diffLib);
         void syncSelectionCallback(Library& diffLib, QTreeWidget* selectionList);
         void setUpSelectionTreeItemLine(QTreeWidgetItem* line, QString name, bool toRemove);
+
+        void changeRemoveStatus();
 };
 
 
