@@ -3,6 +3,7 @@
 #include "sys_headers.h"
 #include "networking.h"
 
+
 class Library;
 class Artist;
 class Album;
@@ -120,7 +121,7 @@ class Library{
             permsObtained = false;
             serverActive = false;
         }
-        void jsonBuild();
+        int jsonBuild();
 
         int addToLibrary(string name, string dirPath);
         int addToLibrary(json jsonSource);

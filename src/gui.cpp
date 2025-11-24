@@ -1,15 +1,17 @@
 #include "gui.h"
 
-void deleteQWidgetFromLayout(QLayout* layout, int indexInLayout){
+int deleteQWidgetFromLayout(QLayout* layout, int indexInLayout){
     QLayoutItem* item = layout->takeAt(indexInLayout);
     if (item) {
         QWidget* widget = item->widget();
         if (widget) {
             widget->setParent(nullptr);
             delete widget;
-        }
+        }else return 1;
         delete item;
-    }
+    }else return 1;
+
+    return 0;
 }
 
 
@@ -33,10 +35,12 @@ WindowGUI::WindowGUI(QWidget* parent) :QMainWindow(parent) {
     fileMenu->addAction(quit);
 
     auto *changeText = new QAction("&Update Text", this);
+    auto *rescanBtn = new QAction("Rescan Library", this);
     auto *tempSel = new QAction("&exec", this);
     QMenu *editMenu = menuBar()->addMenu("&Edit");
     editMenu->addAction(changeText);
     editMenu->addAction(tempSel);
+    editMenu->addAction(rescanBtn);
 
     auto *changeRemoveStatusSelect = new QAction("&Allow removing local tracks", this);
     changeRemoveStatusSelect->setCheckable(true);
@@ -99,10 +103,26 @@ void WindowGUI::ChangeLblText(string text) {
     cout << "edit to " << text << endl;
 }
 
+void WindowGUI::showErrorPopup(int type, string text){
+    switch(type){
+    case 0:
+        QMessageBox::critical(this, tr("Error!"), QString::fromStdString(text));
+        break;
+    case 1:
+        QMessageBox::warning( this, tr("Warning"), QString::fromStdString(text));
+        break;
+    case 2:
+        
+    default:
+        QMessageBox::information( this, tr("Information"), QString::fromStdString(text));
+        break;
+    }
+}
+
 void WindowGUI::changeOpMode(){
     if(!libSet){
         (qobject_cast<QAction*>(sender()))->setChecked(false);
-        QMessageBox::warning( this, tr("Error"), tr("Please set the local library path first!"));
+        showErrorPopup(2, "Please set the local library path first!");
         return;
     }
     if(serverMode){
@@ -122,7 +142,7 @@ void WindowGUI::changeOpMode(){
 void WindowGUI::changeRemoveStatus(){
     if(!libSet){
         (qobject_cast<QAction*>(sender()))->setChecked(false);
-        QMessageBox::warning( this, tr("Error"), tr("Please set the local library path first!"));
+        showErrorPopup(2, "Please set the local library path first!");
         return;
     }
 
@@ -159,7 +179,11 @@ void WindowGUI::startSyncFunc(){
     }
     else{
 
-#if defined(PLATFORM_LINUX) || defined (PLATFORM_WINDOWS)
+#if defined (PLATFORM_ANDROID)
+        showErrorPopup(1, "Server operations not supported on current platform!");
+        return;
+#endif
+
         QPushButton* btn = qobject_cast<QPushButton*>(this->centralWidget()->layout()->itemAt(this->centralWidget()->layout()->count() - 1)->widget());
         btn->setText("Stop Server");
 
@@ -176,13 +200,6 @@ void WindowGUI::startSyncFunc(){
             return initConn(&localLibrary->libJson);
         });
         watcher.setFuture(future);
-        //int ret = initConn(&localLibrary->remoteLibJson,  remoteAddr);
-        //connCallback(ret);
-#elif defined (PLATFORM_ANDROID)    
-        cout << "Server operations not supported on current platform!\n";
-        QMessageBox::information(this, "Warning", "Server operations not supported on current platform!");
-
-#endif
     }
 }
 
@@ -197,10 +214,11 @@ void WindowGUI::showDirSelect(){
         if(fileNames.count() == 1){
             break;
         }
-        QMessageBox::warning( this, tr("Error"), tr("Please only select one library directory!"));
+        showErrorPopup(1, "Please only select one library directory!");
     }
 
     if(fileNames.count() == 1){
+        cout << "count 1 " << endl;
         localLibrary->resetLibrary();
         localLibrary->buildLibrary( fileNames[0].toStdString());
 
@@ -225,31 +243,28 @@ void WindowGUI::setLocalLibrary(Library* library){
 void WindowGUI::connCallback(int connState){
     if(!serverMode){
         if(connState > 0){
-            QMessageBox::information(this, "Warning", "Failed connecting to the server at the provided address!");
-            
-        }else{
-            
-            // popup for sync selection
+            showErrorPopup(0, "Failed connecting to the server at the provided address!");
 
-            cout << "calling sync\n";
+        }else{
+            cout << "calling sync" << endl;
             Library diffLib;
+            localLibrary->remoteLibJson["test"] = "hhjjh";
             if(localLibrary->generateDiff(diffLib) == 1){
-                cout << "Error synchronizing with the server!" << endl;
-                QMessageBox::information(this, "Error", "Failed synchronizing data with the server!");
+                showErrorPopup(0, "Failed synchronizing data with the server!");
                 goto syncDone;
             }
+
+            cout << "das" << endl;
             if(diffLib.artistList.empty()){
-                cout << "Library is up to date" << endl;
-                QMessageBox::information(this, "Info", "The local library is up to date!");
+                showErrorPopup(2, "The local library is up to date!");
                 goto syncDone;
             }
 
             showSyncSelection(diffLib);
 
-            if(diffLib.permsObtained){         // Skip if the selection window was closed manually, callback wasn't called
+            if(diffLib.permsObtained){                                  // Skips if the selection window was closed manually, callback wasn't called
                 if(localLibrary->implementDiff(diffLib) == 1){
-                    cout << "Error synchronizing data with the server!" << endl;
-                    QMessageBox::information(this, "Error", "Failed implementing the server sync data!");
+                    showErrorPopup(0, "Failed implementing the server sync data!");
                 }
                 cout << "sync finished\n";
             }
@@ -265,9 +280,14 @@ void WindowGUI::connCallback(int connState){
     }else{
         localLibrary->serverActive = false;
         if(connState > 0){
-            QMessageBox::information(this, "Warning", "Server Error!");
+            showErrorPopup(0, "Error operating the server!");
         }
         QPushButton* btn = qobject_cast<QPushButton*>(this->centralWidget()->layout()->itemAt(this->centralWidget()->layout()->count() - 2)->widget());
+
+        if(!btn){
+            showErrorPopup(1, "General Error");
+            goto syncDone;
+        }
         btn->setText("Start Server");
 
         disconnect(btn, &QPushButton::clicked, this, nullptr);
@@ -277,7 +297,7 @@ void WindowGUI::connCallback(int connState){
     syncDone:
 
     QVBoxLayout* layout = (QVBoxLayout*)centralWidget()->layout();
-    deleteQWidgetFromLayout(layout, layout->count() - 1);
+    if(deleteQWidgetFromLayout(layout, layout->count() - 1)) showErrorPopup(1, "General Error");
 }
 
 void WindowGUI::showSyncSelection(Library &diffLib){
@@ -429,6 +449,10 @@ void WindowGUI::setMainWindowContent(Library* library, string dispText){
     libLbl->setIndent(100);
     mainBoxLayout->addWidget(libLbl, 0);
 
+    if(library->artistList.empty()){
+        mainBoxLayout->setAlignment(Qt::AlignTop);
+        return;
+    }
 
     for(size_t i = 0; i < library->artistList.size(); i++){
         QLabel* artistLabel = new QLabel("<div style='font-size:13pt;'>" +  QString::number(i+1) + ". " + QString::fromStdString(library->artistList[i]->name) + "</div>");

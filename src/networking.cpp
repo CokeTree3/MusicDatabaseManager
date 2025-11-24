@@ -58,15 +58,34 @@ private:
             if(!ec) {
                 if(recvBuf[0] == 'S' && recvBuf[1] == 'R' && recvBuf[2] == 'Q') {                               // SYNC request
                     cout << "received a JSON request" << endl;
-                    vector<uint8_t> jsonToSend = json::to_bson(*jsonData);
+                    json jsonToSend = *jsonData;
+                    if(jsonToSend.contains("LibraryPath")){
+                        jsonToSend.erase("LibraryPath");
+                    }
+                    vector<uint8_t> jsonBufToSend = json::to_bson(jsonToSend);
 
-                    sendData(&socket_, jsonToSend.data(), jsonToSend.size(), ec);
+                    sendData(&socket_, jsonBufToSend.data(), jsonBufToSend.size(), ec);
 
                 }else if(recvBuf[0] == 'G' && recvBuf[1] == 'E' && recvBuf[2] == 'T'){                          // GET request
                     
                     string req = recvBuf.substr(4);
 
                     cout << "Request for " << req << endl;
+
+                    filesystem::path fsRelPath(req);
+
+                    if(distance(fsRelPath.begin(), fsRelPath.end()) != 3){
+                        cout << "invalid request\n";
+                        sendData(&socket_, static_cast<const void*>(RESP_ERR), sizeof(RESP_ERR), ec);
+                        continue;
+                    }
+                    for(auto const& part : fsRelPath){
+                        if(part == "." || part == ".."){
+                            cout << "invalid request\n";
+                            sendData(&socket_, static_cast<const void*>(RESP_ERR), sizeof(RESP_ERR), ec);
+                            continue;
+                        }
+                    }
 
                     string requestPath = string((*jsonData)["LibraryPath"]) + "/" + req;
 
@@ -85,7 +104,7 @@ private:
                     cout << "server received: \n";
                     cout << recvBuf << endl;
                     sendData(&socket_, static_cast<const void*>(RESP_ERR), sizeof(RESP_ERR), ec);
-                    break;
+                    continue;
                 }
             }else if(ec == asio::error::eof || ec == asio::error::connection_reset){
                 cout << "Conn closed\n";
@@ -206,7 +225,7 @@ int initConn(json* jsonData, string addr) {
 }
 
 void requestTrack(string requestPath, vector<char>& fileData){
-    if(/*!fileOutput->is_open() || */!sock->is_open()){
+    if(!sock->is_open()){
         return;
     }
     cout << "requesting " << requestPath << endl;
@@ -229,7 +248,6 @@ void requestTrack(string requestPath, vector<char>& fileData){
             else{
                 fileData.resize(fileSize);
                 memcpy(fileData.data(), fileBuf, fileSize);
-                //fileOutput->write(static_cast<char*>(fileBuf), fileSize);
             }
             
             free(fileBuf);
@@ -238,8 +256,6 @@ void requestTrack(string requestPath, vector<char>& fileData){
     }catch (error_code e){
         cout << "net error " << e.message() << endl;
     }
-    
-    // send req, read size, malloc the size, read to the mem ptr, write from mem to fileptr
     
 }
 

@@ -1,5 +1,7 @@
+#pragma once
 #ifndef SYS_HEADERS_H
 #define SYS_HEADERS_H
+
 
 #include "config.h"
 
@@ -27,10 +29,6 @@ extern string     remoteAddr;
 #if defined (PLATFORM_LINUX)
 
 #include <filesystem>
-#include <QDirIterator>
-#include <QFile>
-#include <QDir>
-#include <QFileInfo>
 
 #endif
 

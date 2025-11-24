@@ -40,8 +40,10 @@ class WindowGUI : public QMainWindow  {
         ~WindowGUI();
 
         void setMainWindowContent();
-        void setMainWindowContent(Library* library, string dispText = "Local Library");
+        void setMainWindowContent(Library* library, string dispText = "\tLocal Library");
         void setLocalLibrary(Library* library);
+
+        void showErrorPopup(int type, string text);
         
 
     private:
@@ -57,7 +59,6 @@ class WindowGUI : public QMainWindow  {
         void showSyncSelection(Library &diffLib);
         void syncSelectionCallback(Library& diffLib, QTreeWidget* selectionList);
         void setUpSelectionTreeItemLine(QTreeWidgetItem* line, QString name, bool toRemove);
-
         void changeRemoveStatus();
 };
 

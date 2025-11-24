@@ -1,26 +1,41 @@
 #include "library.h"
-#include <cstddef>
-#include <string>
-
 
 uint UcharArrayToUintLE(const unsigned char bytes[4]){
     return (uint)((bytes[0]) | ((bytes[1]) << 8) | ((bytes[2]) << 16) | ((bytes[3]) << 24));
 }
 
+bool namePathCheck(const string& name){
+    if(name == "" || name == "." || name == ".."){
+        return false;
+    }
+
+    filesystem::path fsPath(name);
+
+    if(fsPath.empty()){
+        return false;
+    }
+
+    if(distance(fsPath.begin(), fsPath.end()) != 1){
+        return false;
+    }
+    return true;
+}
+
 #if defined (PLATFORM_LINUX) || defined (PLATFORM_WINDOWS)
-int createNewFileNew(string path, string fName, string libPath){
+int createNewFile(string path, string fName, string libPath){
+
+    filesystem::path fPath;
 
 #if defined (PLATFORM_WINDOWS)
-    filesystem::path fPath = filesystem::u8path(path + fName);
-    ofstream trackFile(fPath, ios::binary);
+    fPath = filesystem::u8path(path + fName);
+#elif defined (PLATFORM_LINUX)
+    fPath = filesystem::path(path + fName);
 #endif
 
-#if defined (PLATFORM_LINUX)
-    ofstream trackFile(path + fName, ios::binary);
-#endif
+    ofstream trackFile(fPath, ios::binary);
 
     if(!trackFile.is_open()){
-        cout << "error creating a new file " << path + fName << endl;
+        cout << "error creating a new file: " << path + fName << endl;
         return 1;
     }
     string relativePath = string(path+fName).substr(libPath.length());
@@ -29,6 +44,10 @@ int createNewFileNew(string path, string fName, string libPath){
 
     requestTrack(relativePath, buf);
 
+    if(buf.empty()){
+        cout << "Error requesting server file: " << relativePath << endl;
+        return 1;
+    }
     trackFile.write(buf.data(), buf.size());
 
     trackFile.close();
@@ -37,7 +56,7 @@ int createNewFileNew(string path, string fName, string libPath){
 #endif
 
 #if defined (PLATFORM_ANDROID)
-int createNewFileNew(string path, string fName, string libPath){
+int createNewFile(string path, string fName, string libPath){
     string relativePath = path.substr(libPath.length() + 1);
 
     //if(!permsObtained){                                           // permsObtained is a Library element, this func isnt part of Library anymore, needs a fix
@@ -47,10 +66,16 @@ int createNewFileNew(string path, string fName, string libPath){
     string relativePathWName = string(path+fName).substr(libPath.length());
     requestTrack(relativePathWName, buf);
 
+    if(buf.empty()){
+        cout << "Error requesting server file: " << relativePath << endl;
+        return 1;
+    }
+
     int res = createFileAndroid(fName, relativePath, buf.data(), buf.size());
 
     if(res != 0){
-        cout << "Error creating track file: " << path + fName <<  endl;                 // error msg notif on android
+        cout << "Error creating track file: " << path + fName <<  endl;
+        return 1;
     }
     return 0;
 }
@@ -94,8 +119,6 @@ void makeDir(string absolutePath){                                          // D
     if(ec){
         cout << "ERROR: couldn't create directory: " << absolutePath << "\n Error: " << ec.message() << endl;
     }
-#elif defined (PLATFORM_ANDROID)
-    cout << "Directory creating is not needed(" << absolutePath << ")" << endl;
 #endif
     return;
 }
@@ -112,8 +135,8 @@ int Library::buildLibrary(string searchDir){
         cout << "This library is currently used by an active server thread!/n Action not permitted!" << endl;
         return 1;
     }
+    cout << "building from " << searchDir << endl;
     libPath = searchDir;
-    int count = 1;
 
 #if defined (PLATFORM_LINUX) || defined (PLATFORM_WINDOWS)
     for (auto i = filesystem::directory_iterator(searchDir); i != filesystem::directory_iterator(); ++i){
@@ -121,7 +144,6 @@ int Library::buildLibrary(string searchDir){
             continue;
         }
         this->addToLibrary(i->path().lexically_relative(searchDir).string(), i->path().string());
-        count++;
     }
 #elif defined (PLATFORM_ANDROID)
 
@@ -131,23 +153,32 @@ int Library::buildLibrary(string searchDir){
         if(!iter.fileInfo().isDir()){
             continue;
         }
-        this->addToLibrary(iter.fileName().toStdString(), iter.filePath().toStdString());
-        count++;
+        if(this->addToLibrary(iter.fileName().toStdString(), iter.filePath().toStdString())) return 1;
     }
 #endif
 
-    jsonBuild();
+    if(jsonBuild()){
+        cout << "Error writing to local JSON file" << endl;
+    }
     return 0;
 }
 
-void Library::jsonBuild(){
+int Library::jsonBuild(){
     if(serverActive){
         cout << "This library is currently used by an active server thread!/n Action not permitted!" << endl;
-        return;
+        return 1;
     }
+
+    cout << "call to build" << endl;
+
     ofstream s("library.json", ios::binary);
 
+    if(!s.is_open()){
+        return 1;
+    }
+
     size_t count = artistList.size();
+    cout << libPath << endl;
     libJson["LibraryPath"] = libPath;
     libJson["ArtistCount"] = count;
     libJson["Artists"] = json::array({});
@@ -158,7 +189,7 @@ void Library::jsonBuild(){
     s << setw(4) << libJson;
     s.close();
 
-    return;
+    return 0;
 }
 
 int Library::jsonRead(){
@@ -169,10 +200,19 @@ int Library::jsonRead(){
     string libFile = "library.json";
 
     if(access( libFile.c_str(), F_OK ) != -1){
-        ifstream f(libFile, ios::binary);
-        json data = json::parse(f);
-        f.close();
-        if(buildLibrary(data["LibraryPath"])){
+        ifstream f;
+        json jsonData;
+        try{
+            f.open(libFile, ios::binary);
+            jsonData = json::parse(f);
+            f.close();
+        }catch(...){
+            if(f.is_open()){
+                f.close();
+            }
+            return 1;
+        }
+        if(buildLibrary(jsonData["LibraryPath"])){
             libSet = false;
             return 1;
         }
@@ -182,10 +222,13 @@ int Library::jsonRead(){
     }else{
         cout << "Creating a new Library JSON file\n";
         ofstream of(libFile, ios::binary);
+        if(!of){
+            return 1;
+        }
         libJson["LibraryPath"] = libPath;
         of << setw(4) << libJson;
         of.close();
-        return 1;
+        return 0;
     }
     
 }
@@ -198,11 +241,11 @@ int Library::buildFromJson(json jsonSource){
     if(!jsonSource.contains("Artists")) return 1;
     this->libJson = jsonSource;
     this->libPath = "";
-
+    if(jsonSource.contains("test")) cout << jsonSource["test"] << endl;
+    cout << jsonSource["test"] << endl;
     for(size_t i = 0; i < jsonSource["Artists"].size(); i++){
         this->addToLibrary(jsonSource["Artists"][i]);
     }
-
 
     return 0;
 }
@@ -239,7 +282,6 @@ int Library::findDiff(Library* remoteLib, json* jsonDiff){
         }
     }
 
-
     return 0;
 }
 
@@ -252,23 +294,23 @@ int Library::generateDiff(Library &diffLib){
     json diff;
     Library serverLib;
 
-    serverLib.buildFromJson(remoteLibJson);
-    serverLib.findDiff(this, &diff);
+    if(serverLib.buildFromJson(remoteLibJson)) return 1;
+    if(serverLib.findDiff(this, &diff)) return 1;
 
     if(diff.empty()){
         return 1;
     }
 
-    ofstream f("libDiff.json", ios::binary);
+    /*ofstream f("libDiff.json", ios::binary);
     f << setw(4) << diff;
-    f.close();
+    f.close();*/
 
     return diffLib.buildFromJson(diff);
 }
 
 int Library::syncWithServer(){
     Library diffLib;
-    if(generateDiff(diffLib) == 1){
+    if(generateDiff(diffLib)){
         return 1;
     }
     return implementDiff(diffLib);
@@ -278,7 +320,7 @@ int Library::implementDiff(Library &diffLib){
 
     cout << "starting fs operations\n";
     for(size_t i = 0; i < diffLib.artistList.size(); i++){
-        diffLib.artistList[i]->implementDiff(*this, libPath, libPath);
+        if(diffLib.artistList[i]->implementDiff(*this, libPath, libPath)) return 1;
     }
     
     return 0;
@@ -290,7 +332,6 @@ int Library::addToLibrary(string name, string dirPath){
 }
 
 int Library::addToLibrary(json jsonSource){
-
     artistList.push_back(make_unique<Artist>(jsonSource));
     return artistList.size() - 1;
 }
@@ -344,20 +385,40 @@ void Library::displayData(){
 *   Artist Class Functions
 */
 Artist::Artist(string name){
-    this->name = name;
+    if(namePathCheck(name)){
+        this->name = name;
+    }else{
+        this->name = "";
+        cout << "Artist name contains invalid characters" << endl;
+    }
+
     albumCount = 0;
 }
 
 Artist::Artist(string name, string dirPath){
-    this->name = name;
+    if(namePathCheck(name)){
+        this->name = name;
+    }else{
+        this->name = "";
+        cout << "Artist name contains invalid characters" << endl;
+    }
+
     this->albumCount = 0;
     if(directoryToAlbums(dirPath)){
-        //throw error
+        albumCount = 0;
+        albumList.clear();
+        cout << "Error creating Library, Failed generating album list of: " << this->name << endl;
     }
 }
 
 Artist::Artist(json jsonSource){
-    this->name = jsonSource["1Name"];
+    if(namePathCheck(jsonSource["1Name"])){
+        this->name = jsonSource["1Name"];
+    }else{
+        this->name = "";
+        cout << "Artist name contains invalid characters" << endl;
+    }
+
     this->albumCount = 0;
     if(jsonSource.contains("Remove") && jsonSource["Remove"] == true){
         this->toBeRemoved = true;
@@ -377,7 +438,9 @@ Artist::Artist(Artist& toCopyFrom, string fullPath, string libPath){
         }
     }else{
         for(size_t i = 0; i < toCopyFrom.albumList.size(); i++){
-            toCopyFrom.albumList[i]->implementDiff(*this, fullPath, libPath);
+            if(toCopyFrom.albumList[i]->implementDiff(*this, fullPath, libPath)){
+                cout << "Error creating Library, Failed generating album list of: " << this->name << endl;
+            }
         }
     }
     
@@ -460,11 +523,10 @@ int Artist::implementDiff(Library& mainLib, string rootPath, const string libPat
 
     cout << artistPathFull << endl;
     if(this->toBeRemoved){
-        cout << "removing artist " << artistPathFull << endl;
         removeDir(artistPathFull);
         for(size_t i = 0; i < mainLib.artistList.size(); i++){
             if(this->name == mainLib.artistList[i]->name){
-                mainLib.removeFromLibrary(this->name, i);
+                if(mainLib.removeFromLibrary(this->name, i)) return 1;
                 break;
             }
         }
@@ -475,15 +537,16 @@ int Artist::implementDiff(Library& mainLib, string rootPath, const string libPat
         if(this->name == mainLib.artistList[i]->name){
             found = true;
             for(size_t j = 0; j < this->albumList.size(); j++){
-                this->albumList[j]->implementDiff(*mainLib.artistList[i], artistPathFull, libPath);
+                if(this->albumList[j]->implementDiff(*mainLib.artistList[i], artistPathFull, libPath)){
+                    cout << "Error creating Library, Failed generating album list of: " << this->name << endl;
+                }
             }
             break;
         }
     }
     if(!found){
         makeDir(artistPathFull);
-        mainLib.addToLibrary(*this, artistPathFull, libPath);
-        
+        mainLib.addToLibrary(*this, artistPathFull, libPath);   
     }
     return 0;
 }
@@ -568,22 +631,35 @@ int Artist::directoryToAlbums(string path){
 *   Album Class Functions
 */
 Album::Album(string name){
-    this->name = name;
+    if(namePathCheck(name)){
+        this->name = name;
+    }else{
+        this->name = "";
+        cout << "Album name contains invalid characters" << endl;
+    }
 
 #if defined (PLATFORM_LINUX) || defined (PLATFORM_WINDOWS)
     this->coverPath = filesystem::current_path().string() + "/assets/missingCov.jpg";
 
-#elif defined (PLATFORM_ANDROID)                      // TODO add missing cover placeholder icon
-    this->coverPath = "";
+#elif defined (PLATFORM_ANDROID)
+    this->coverPath = QDir::currentPath().toStdString() + "/assets/missingCov.jpg";
 #endif
     trackCount = 0;
 }
 
 Album::Album(string name, string dirPath){
-    this->name = name;
+    if(namePathCheck(name)){
+        this->name = name;
+    }else{
+        this->name = "";
+        cout << "Album name contains invalid characters" << endl;
+    }
+    
     this->trackCount = 0;
     if(directoryToTracks(dirPath)){
-        //throw error
+        trackCount = 0;
+        trackList.clear();
+        cout << "Error creating Library, Failed generating track list of album: " << this->name << ", path: " << dirPath << endl;
     }
 
 #if defined (PLATFORM_LINUX) || defined (PLATFORM_WINDOWS)                                  // Add path searching for cover photo(as a helper func)
@@ -604,13 +680,21 @@ Album::Album(string name, string dirPath){
     }
     else if(QFileInfo::exists(QString::fromStdString(dirPath + "/cover.png"))){
         coverPath = dirPath + "/cover.png";
+    }else{
+        coverPath = QDir::currentPath().toStdString() + "/assets/missingCov.jpg";
     }
 
 #endif
 }
 
 Album::Album(json jsonSource){
-    this->name = jsonSource["1Name"];
+    if(namePathCheck(jsonSource["1Name"])){
+        this->name = jsonSource["1Name"];
+    }else{
+        this->name = "";
+        cout << "Album name contains invalid characters" << endl;
+    }
+
     this->trackCount = 0;
     if(jsonSource.contains("Remove") && jsonSource["Remove"] == true){
         this->toBeRemoved = true;
@@ -633,7 +717,9 @@ Album::Album(Album& toCopyFrom, string fullPath, string libPath){
         }
     }else{
         for(size_t i = 0; i < toCopyFrom.trackList.size(); i++){
-            toCopyFrom.trackList[i]->implementDiff(*this, fullPath, libPath);
+            if(toCopyFrom.trackList[i]->implementDiff(*this, fullPath, libPath)){
+                cout << "Error creating Library, Failed generating track list of: " << this->name << ", path: " << fullPath << endl;
+            }
         }
     }
 }
@@ -688,11 +774,10 @@ int Album::implementDiff(Artist& mainLibArtist, string rootPath, const string li
 
     cout << "    " << albumPathFull << endl;
     if(this->toBeRemoved){
-        cout << "removing album " << albumPathFull << endl;
         removeDir(albumPathFull);
         for(size_t i = 0; i < mainLibArtist.albumList.size(); i++){
             if(this->name == mainLibArtist.albumList[i]->name){
-                mainLibArtist.removeAlbum(this->name, i);
+                if(mainLibArtist.removeAlbum(this->name, i)) return 1;
                 break;
             }
         }
@@ -703,7 +788,10 @@ int Album::implementDiff(Artist& mainLibArtist, string rootPath, const string li
         if(this->name == mainLibArtist.albumList[i]->name){
             found = true;
             for(size_t j = 0; j < this->trackList.size(); j++){
-                this->trackList[j]->implementDiff(*mainLibArtist.albumList[i], albumPathFull, libPath);
+                if(this->trackList[j]->implementDiff(*mainLibArtist.albumList[i], albumPathFull, libPath)){
+                    cout << "Error creating Library, Failed generating track list of: " << this->name << ", path: " << rootPath << endl;
+                    return 1;
+                }
             }
             break;
         }
@@ -821,8 +909,8 @@ int Album::directoryToTracks(string path){
 #endif
 
     sort(trackList.begin(), trackList.end(), [](const unique_ptr<Track> &a, const unique_ptr<Track> &b) {
-                  return a->orderInAlbum < b->orderInAlbum;
-              });
+                  return a->orderInAlbum < b->orderInAlbum;});
+
     return 0;
 }
 
@@ -832,7 +920,13 @@ int Album::directoryToTracks(string path){
 *   Track Class Functions
 */
 Track::Track(string name, int order){
-    this->name = name;
+    if(namePathCheck(name)){
+        this->name = name;
+    }else{
+        this->name = "";
+        cout << "Track name contains invalid characters" << endl;
+    }
+
     this->order = order;
     this->orderInAlbum = order;
     this->fileName = "";
@@ -851,8 +945,20 @@ Track::Track(int order, string filePath){
 }
 
 Track::Track(json jsonSource){
-    this->name = jsonSource["1Name"];
-    this->fileName = jsonSource["FileName"];
+    if(namePathCheck(jsonSource["1Name"])){
+        this->name = jsonSource["1Name"];
+    }else{
+        this->name = "";
+        cout << "Track name contains invalid characters" << endl;
+    }
+
+    if(namePathCheck(jsonSource["FileName"])){
+        this->fileName = jsonSource["FileName"];
+    }else{
+        this->fileName = "";
+        cout << "Track filename contains invalid characters" << endl;
+    }
+
     if(jsonSource.contains("Remove") && jsonSource["Remove"] == true){
         this->toBeRemoved = true;
         return;
@@ -880,9 +986,9 @@ json Track::getJsonStructure(){
     try{
         if((unsigned char)this->name[0] == 0xff){
             cout << "QWQWQWQWQW " << name << order << endl;
-        }else{
-            data["1Name"] = this->name;
         }
+            
+        data["1Name"] = this->name;
     }catch(...){
         cout << this->name << "BADBAD" << endl;
     }
@@ -894,15 +1000,16 @@ json Track::getJsonStructure(){
 }
 
 int Track::implementDiff(Album& mainLibAlbum, string rootPath, const string libPath){
+    if(this->fileName == "" || rootPath == "" || libPath == "") return 1;
+    
     string trackPathFull = rootPath + "/" + this->fileName;
 
-    cout << "          " << trackPathFull << endl;
     if(this->toBeRemoved){
         cout << "removing track " << trackPathFull << endl;
         removeFile(trackPathFull);
         for(size_t i = 0; i < mainLibAlbum.trackList.size(); i++){
             if(this->name == mainLibAlbum.trackList[i]->name){
-                mainLibAlbum.removeTrack(this->name, i);
+                if(mainLibAlbum.removeTrack(this->name, i)) return 1;
                 break;
             }
         }
@@ -912,12 +1019,12 @@ int Track::implementDiff(Album& mainLibAlbum, string rootPath, const string libP
     for(size_t i = 0; i < mainLibAlbum.trackList.size(); i++){
         if(this->name == mainLibAlbum.trackList[i]->name){
             found = true;
-            cout << "What" << endl;
+            cout << "This should never happen" << endl;                         // This should never happen
             break;
         }
     }
     if(!found){
-        createNewFileNew(rootPath + "/", this->fileName, libPath);
+        if(createNewFile(rootPath + "/", this->fileName, libPath)) return 1;
         mainLibAlbum.addTrack(*this);
     }
     return 0;
@@ -925,6 +1032,9 @@ int Track::implementDiff(Album& mainLibAlbum, string rootPath, const string libP
 
 #if defined (PLATFORM_LINUX)// || defined (PLATFORM_WINDOWS)                                Windows currently temporarly moved to QT approach
 int Track::readMP3TagFrame(ifstream& f, const string& neededTagID, string* output){
+
+    if(!f || !f.is_open()) return 1;
+
     string tagID(4, '\0');
     f.read(&tagID[0], 4);
 
@@ -940,10 +1050,8 @@ int Track::readMP3TagFrame(ifstream& f, const string& neededTagID, string* outpu
 
     if(tagID != neededTagID){
         f.ignore(2 + frameSize);
-        readMP3TagFrame(f, neededTagID, output);
-        return 0;
+        return readMP3TagFrame(f, neededTagID, output);
     }
-    
     
     f.ignore(3);
     output->resize(frameSize);
@@ -954,6 +1062,8 @@ int Track::readMP3TagFrame(ifstream& f, const string& neededTagID, string* outpu
 }
 
 int Track::readFLACMetadataBlock(ifstream& f, const string& neededBlockType, string* output){
+
+    if(!f || !f.is_open()) return 1;
 
     unsigned char header[4];
     f.read(reinterpret_cast<char*>(&header), sizeof(char) * 4);
@@ -966,8 +1076,8 @@ int Track::readFLACMetadataBlock(ifstream& f, const string& neededBlockType, str
         }
         f.ignore(blockSize);
         
-        readFLACMetadataBlock(f, neededBlockType, output);
-        return 0;
+        
+        return readFLACMetadataBlock(f, neededBlockType, output);
     }
 
     unsigned char vendorLen[4];
@@ -997,6 +1107,9 @@ int Track::readFLACMetadataBlock(ifstream& f, const string& neededBlockType, str
 
 #if defined (PLATFORM_ANDROID)  || defined (PLATFORM_WINDOWS)
 int Track::readMP3TagFrameQt(QFile& f, const string& neededTagID, string* output){
+
+    if(!f.isOpen()) return 1;
+
     string tagID(4, '\0');
     f.read(&tagID[0], 4);
 
@@ -1012,8 +1125,8 @@ int Track::readMP3TagFrameQt(QFile& f, const string& neededTagID, string* output
 
     if(tagID != neededTagID){
         f.skip(2 + frameSize);
-        readMP3TagFrameQt(f, neededTagID, output);
-        return 0;
+        
+        return readMP3TagFrameQt(f, neededTagID, output);
     }
     
     
@@ -1027,6 +1140,8 @@ int Track::readMP3TagFrameQt(QFile& f, const string& neededTagID, string* output
 
 int Track::readFLACMetadataBlockQt(QFile& f, const string& neededBlockType, string* output){
 
+    if(!f.isOpen()) return 1;
+
     unsigned char header[4];
     f.read(reinterpret_cast<char*>(&header), sizeof(char) * 4);
 
@@ -1039,8 +1154,8 @@ int Track::readFLACMetadataBlockQt(QFile& f, const string& neededBlockType, stri
         }
         f.skip(blockSize);
         
-        readFLACMetadataBlockQt(f, neededBlockType, output);
-        return 0;
+        
+        return readFLACMetadataBlockQt(f, neededBlockType, output);
     }
 
     unsigned char vendorLen[4];
@@ -1096,12 +1211,12 @@ int Track::readFile(string fileName){
         f.seekg(4);
 
         if(readFLACMetadataBlock(f, "TITLE", &title)){
-            //throw error
+            return 1;
         }
         f.seekg(4);
 
         if(readFLACMetadataBlock(f, "TRACKNUMBER", &ord)){
-            //throw error
+            return 1;
         }
 
     }else if(fType == ".mp3"){
@@ -1117,12 +1232,12 @@ int Track::readFile(string fileName){
         f.seekg(10);
 
         if(readMP3TagFrame(f, "TIT2", &title)){
-            //throw error
+            return 1;
         }
         f.seekg(10);
         
         if(readMP3TagFrame(f, "TRCK", &ord)){
-            cout << "Error\n";
+            return 1;
         }
     }else{
         this->name = filesystem::path(fileName).extension().string() + " file format is not supported";
@@ -1178,12 +1293,12 @@ int Track::readFile(string fileName){
         f.seek(4);
 
         if(readFLACMetadataBlockQt(f, "TITLE", &title)){
-            //throw error
+            return 1;
         }
         f.seek(4);
 
         if(readFLACMetadataBlockQt(f, "TRACKNUMBER", &ord)){
-            //throw error
+            return 1;
         }
 
     }else if(fType == ".mp3"){
@@ -1199,12 +1314,12 @@ int Track::readFile(string fileName){
         f.seek(10);
 
         if(readMP3TagFrameQt(f, "TIT2", &title)){
-            //throw error
+            return 1;
         }
         f.seek(10);
         
         if(readMP3TagFrameQt(f, "TRCK", &ord)){
-            cout << "Error\n";
+            return 1;
         }
     }else{
         this->name = "." + QFileInfo(QString::fromStdString(fileName)).suffix().toStdString() + " file format is not supported";
