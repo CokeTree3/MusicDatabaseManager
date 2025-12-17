@@ -25,18 +25,20 @@ class Track{
         int implementDiff(Album& mainLibAlbum, string rootPath, const string libPath);
         void printData();
         json getJsonStructure();
+        int getEmbededImage(vector<unsigned char>& buf, string rootPath);
     private:
         int readFile(string fileName);
+        
         
 
         #if defined (PLATFORM_LINUX)// || defined (PLATFORM_WINDOWS)                        Windows currently temporarly moved to QT approach                
             int readMP3TagFrame(ifstream& f, const string& neededTagID, string* output);
-            int readFLACMetadataBlock(ifstream& f, const string& neededBlockType, string* output);
+            int readFLACMetadataBlock(ifstream& f, const string& neededInfoType, uint8_t neededBlock, string* output);
         #endif
 
         #if defined (PLATFORM_ANDROID) || defined (PLATFORM_WINDOWS)
             int readMP3TagFrameQt(QFile& f, const string& neededTagID, string* output);
-            int readFLACMetadataBlockQt(QFile& f, const string& neededBlockType, string* output);
+            int readFLACMetadataBlockQt(QFile& f, const string& neededInfoType, uint8_t neededBlock, string* output);
         #endif
 };
 
@@ -47,6 +49,7 @@ class Album{
         size_t trackCount;
         bool toBeRemoved = false;
         vector<unique_ptr<Track>> trackList;
+        vector<unsigned char> coverBuf;
 
         Album(string name);
         Album(string name, string dirPath);
@@ -61,6 +64,9 @@ class Album{
         int addTrack(json jsonSource);
         int addTrack(Track& toCopyFrom);
         int removeTrack(string name, int indexInList);
+        void sortTracks();
+
+        void setCover(string rootPath);
 
         int implementDiff(Artist& mainLibArtist, string rootPath, const string libPath);
         json getJsonStructure();
@@ -138,7 +144,6 @@ class Library{
         int findDiff(Library* remoteLib, json* jsonDiff);
         int generateDiff(Library &diffLib);
         int implementDiff(Library &diffLib);
-        int syncWithServer();
 
         void printData();
         void displayData();

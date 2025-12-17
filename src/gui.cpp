@@ -217,8 +217,8 @@ void WindowGUI::showDirSelect(){
         showErrorPopup(1, "Please only select one library directory!");
     }
 
+    
     if(fileNames.count() == 1){
-        cout << "count 1 " << endl;
         localLibrary->resetLibrary();
         localLibrary->buildLibrary( fileNames[0].toStdString());
 
@@ -248,13 +248,11 @@ void WindowGUI::connCallback(int connState){
         }else{
             cout << "calling sync" << endl;
             Library diffLib;
-            localLibrary->remoteLibJson["test"] = "hhjjh";
             if(localLibrary->generateDiff(diffLib) == 1){
                 showErrorPopup(0, "Failed synchronizing data with the server!");
                 goto syncDone;
             }
 
-            cout << "das" << endl;
             if(diffLib.artistList.empty()){
                 showErrorPopup(2, "The local library is up to date!");
                 goto syncDone;
@@ -482,7 +480,15 @@ AlbumDropdown::AlbumDropdown(unique_ptr<Album>& album, QWidget* parent) : QWidge
     QWidget* albumTitleBar = new QWidget();
 
     QLabel* pixBox = new QLabel();
-    QPixmap* pix = new QPixmap(QString::fromStdString(album->coverPath));
+    QPixmap* pix = new QPixmap();
+    if(album->coverPath == "" && album->coverBuf.empty()){
+        pix->load(QDir::currentPath() + "/assets/missingCov.jpg");
+    }else if (album->coverPath == ""){
+        pix->loadFromData(album->coverBuf.data(), album->coverBuf.size());
+    }else{
+        pix->load(QString::fromStdString(album->coverPath));
+    }
+
     pixBox->setPixmap(pix->scaled(60, 60, Qt::KeepAspectRatio, Qt::FastTransformation));
     pixBox->setFixedSize(60, 60);
     pixBox->setAttribute(Qt::WA_TransparentForMouseEvents);

@@ -46,8 +46,6 @@ Note that the synchronization will also remove any extra tracks/albums/artists t
 During synchronization a selection window allows to deselect specific tracks, albums and artists which to not synchronize with the server. 
 
 If already exists locally, the library needs to follow a structure of *root* - *Artist Name* - *Album Name* - *Tracks*, where the Artists and Albums are directories. The Album directory can optionally contain a *jpg* or *png* file that will be loaded as the album cover. If not provided, the cover image will be taken from the embedded cover of the first track in the album, and if this is not available, the default image will be used(from /assets directory)
-***Note -*** Currently cover image synchronization is not implemented!
-
 
 
 ## Building
@@ -77,11 +75,12 @@ Since the project is sill in very early development and for now is very simple a
 
 Some features I plan to add:
 
+* Improved UI
 * A CLI server binary, with no Qt dependency
 * Local track importing(managing artist and album directories)
 * Android Studio/Kotlin based Android app
 * Server funcionality on Android
-* Improved UI
+* Playlist file syncronization
 * \+ more 
 
 ## Screenshots

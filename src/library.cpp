@@ -120,6 +120,7 @@ void makeDir(string absolutePath){                                          // D
         cout << "ERROR: couldn't create directory: " << absolutePath << "\n Error: " << ec.message() << endl;
     }
 #endif
+    Q_UNUSED(absolutePath);
     return;
 }
 
@@ -135,7 +136,7 @@ int Library::buildLibrary(string searchDir){
         cout << "This library is currently used by an active server thread!/n Action not permitted!" << endl;
         return 1;
     }
-    cout << "building from " << searchDir << endl;
+
     libPath = searchDir;
 
 #if defined (PLATFORM_LINUX) || defined (PLATFORM_WINDOWS)
@@ -168,9 +169,6 @@ int Library::jsonBuild(){
         cout << "This library is currently used by an active server thread!/n Action not permitted!" << endl;
         return 1;
     }
-
-    cout << "call to build" << endl;
-
     ofstream s("library.json", ios::binary);
 
     if(!s.is_open()){
@@ -178,7 +176,7 @@ int Library::jsonBuild(){
     }
 
     size_t count = artistList.size();
-    cout << libPath << endl;
+
     libJson["LibraryPath"] = libPath;
     libJson["ArtistCount"] = count;
     libJson["Artists"] = json::array({});
@@ -241,8 +239,6 @@ int Library::buildFromJson(json jsonSource){
     if(!jsonSource.contains("Artists")) return 1;
     this->libJson = jsonSource;
     this->libPath = "";
-    if(jsonSource.contains("test")) cout << jsonSource["test"] << endl;
-    cout << jsonSource["test"] << endl;
     for(size_t i = 0; i < jsonSource["Artists"].size(); i++){
         this->addToLibrary(jsonSource["Artists"][i]);
     }
@@ -301,19 +297,11 @@ int Library::generateDiff(Library &diffLib){
         return 1;
     }
 
-    /*ofstream f("libDiff.json", ios::binary);
+    ofstream f("libDiff.json", ios::binary);
     f << setw(4) << diff;
-    f.close();*/
+    f.close();
 
     return diffLib.buildFromJson(diff);
-}
-
-int Library::syncWithServer(){
-    Library diffLib;
-    if(generateDiff(diffLib)){
-        return 1;
-    }
-    return implementDiff(diffLib);
 }
 
 int Library::implementDiff(Library &diffLib){
@@ -638,13 +626,9 @@ Album::Album(string name){
         cout << "Album name contains invalid characters" << endl;
     }
 
-#if defined (PLATFORM_LINUX) || defined (PLATFORM_WINDOWS)
-    this->coverPath = filesystem::current_path().string() + "/assets/missingCov.jpg";
-
-#elif defined (PLATFORM_ANDROID)
-    this->coverPath = QDir::currentPath().toStdString() + "/assets/missingCov.jpg";
-#endif
     trackCount = 0;
+
+    setCover("");
 }
 
 Album::Album(string name, string dirPath){
@@ -662,29 +646,8 @@ Album::Album(string name, string dirPath){
         cout << "Error creating Library, Failed generating track list of album: " << this->name << ", path: " << dirPath << endl;
     }
 
-#if defined (PLATFORM_LINUX) || defined (PLATFORM_WINDOWS)                                  // Add path searching for cover photo(as a helper func)
-
-    if(filesystem::exists(filesystem::path(dirPath + "/cover.jpg"))){
-        coverPath = dirPath + "/cover.jpg";
-    }
-    else if(filesystem::exists(filesystem::path(dirPath + "/cover.png"))){
-        coverPath = dirPath + "/cover.png";
-    }else{
-        coverPath = filesystem::current_path().string() + "/assets/missingCov.jpg";
-    }
-
-#elif defined (PLATFORM_ANDROID)
-
-    if(QFileInfo::exists(QString::fromStdString(dirPath + "/cover.jpg"))){
-        coverPath = dirPath + "/cover.jpg";
-    }
-    else if(QFileInfo::exists(QString::fromStdString(dirPath + "/cover.png"))){
-        coverPath = dirPath + "/cover.png";
-    }else{
-        coverPath = QDir::currentPath().toStdString() + "/assets/missingCov.jpg";
-    }
-
-#endif
+    sortTracks();
+    setCover(dirPath);
 }
 
 Album::Album(json jsonSource){
@@ -704,13 +667,20 @@ Album::Album(json jsonSource){
     for(size_t i = 0; i < jsonSource["Tracks"].size(); i++){
         addTrack(jsonSource["Tracks"][i]);
     }
-    this->coverPath = "";
+
+    sortTracks();
+
+    if(jsonSource.contains("CoverName")){
+        this->coverPath = jsonSource["CoverName"];
+    }else{
+        setCover("");
+    }
 }
 
 Album::Album(Album& toCopyFrom, string fullPath, string libPath){
     this->name = toCopyFrom.name;
     this->trackCount = 0;
-    this->coverPath = "";                                       // Add path searching for cover photo(as a helper func)
+    this->coverPath = "";
     if(fullPath == "" || libPath == ""){
         for(size_t i = 0; i < toCopyFrom.trackList.size(); i++){
             this->addTrack(*toCopyFrom.trackList[i]);
@@ -722,6 +692,9 @@ Album::Album(Album& toCopyFrom, string fullPath, string libPath){
             }
         }
     }
+
+    sortTracks();
+    setCover(fullPath);
 }
 
 
@@ -798,6 +771,11 @@ int Album::implementDiff(Artist& mainLibArtist, string rootPath, const string li
     }
     if(!found){
         makeDir(albumPathFull);
+        cout << "Need request for cover file with path" << albumPathFull.substr(libPath.length()) + "/" + coverPath << endl;
+
+        //if(createNewFile(albumPathFull + "/", this->coverPath, libPath)) return 1;
+        // set the full coverpath for the local album after adding to lib vvv 
+
         mainLibArtist.addAlbum(*this, albumPathFull, libPath);
     }
     return 0;
@@ -815,10 +793,82 @@ void Album::printTracks(){
     }
 }
 
+void Album::sortTracks(){
+    sort(trackList.begin(), trackList.end(), [](const unique_ptr<Track> &a, const unique_ptr<Track> &b) {
+                  return a->orderInAlbum < b->orderInAlbum;});
+}
+
+void Album::setCover(string rootPath){
+#if defined (PLATFORM_LINUX) || defined (PLATFORM_WINDOWS)
+
+    if(filesystem::exists(rootPath) && filesystem::is_directory(rootPath)){
+
+        bool found = false;
+
+        for(auto const& fileEntry : filesystem::directory_iterator(rootPath)){
+            if(filesystem::is_regular_file(fileEntry)){
+                string ext = fileEntry.path().extension();
+                if(ext == ".jpg" || ext == ".png" || ext == ".ico" || ext == ".jpeg"){
+                    found = true;
+                    this->coverPath = fileEntry.path();
+                    break;
+                }
+            }
+        }
+        if(!found){
+            this->coverPath = "";
+        }
+    }else{
+        this->coverPath = "";
+    }
+
+    if(coverPath == "" && trackCount > 0){
+        trackList[0]->getEmbededImage(this->coverBuf, rootPath + "/");
+        if(this->coverBuf.empty()){
+            cout << "returned empty" << endl;
+        }
+
+    }
+
+#elif defined (PLATFORM_ANDROID)
+
+    QFileInfo rootInfo(QString::fromStdString(rootPath));
+    if(rootInfo.exists() && rootInfo.isDir()){
+
+        bool found = false;
+        QDirIterator iter(QString::fromStdString(rootPath), QDir::NoDotAndDotDot | QDir::AllEntries);
+
+        while(iter.hasNext()){
+            QString fileEntry = iter.next();
+            if(!iter.fileInfo().isDir()){
+                QString ext = iter.fileInfo().completeSuffix();
+                if(ext == "jpg" || ext == "png" || ext == "ico" || ext == "jpeg"){
+                    found = true;
+                    this->coverPath = fileEntry.toStdString();
+                    break;
+                }
+            }
+        }
+        if(!found){
+            this->coverPath = "";
+        }
+    }else{
+        this->coverPath = "";
+    }
+
+#endif
+}
+
 json Album::getJsonStructure(){
     json data;
     data["1Name"] = this->name;
     data["TrackCount"] = this->trackCount;
+    if(this->coverPath != ""){
+        uint64_t startPos = this->coverPath.rfind('/');
+        //cout << "cov start " << startPos << " end " << coverPath.npos << endl;
+        data["CoverName"] = this->coverPath.substr((startPos == this->coverPath.npos) ? 0 : startPos + 1, this->coverPath.npos);
+    }
+
     data["Tracks"] = json::array({});
 
     for(size_t i = 0; i < trackCount; i++){
@@ -832,6 +882,11 @@ json Album::getEmptyJsonStructure(){
     json data;
     data["1Name"] = this->name;
     data["Tracks"] = json::array({});
+    if(this->coverPath != ""){
+        uint64_t startPos = this->coverPath.rfind('/');
+        //cout << "cov start " << startPos << " end " << coverPath.npos << endl;
+        data["CoverName"] = this->coverPath.substr((startPos == this->coverPath.npos) ? 0 : startPos + 1, this->coverPath.npos);
+    }
 
     return data;
 }
@@ -878,10 +933,6 @@ int Album::directoryToTracks(string path){
         }
 
         string fType = i->path().extension().string();
-        if(fType == ".jpg" || fType == ".png"){
-            this->coverPath = i->path().string();
-            continue;
-        }
         if(fType == ".mp3" || fType == ".flac"){
             addTrack(trackOrder, i->path().string());
             trackOrder++;
@@ -897,19 +948,12 @@ int Album::directoryToTracks(string path){
             continue;
         }
         QString fType = iter.fileInfo().suffix();
-        if(fType == "jpg" || fType == "png"){
-            this->coverPath = iter.filePath().toStdString();
-            continue;
-        }
         if(fType == "mp3" || fType == "flac"){
             addTrack(trackOrder, iter.filePath().toStdString());
             trackOrder++;
         }
     }
 #endif
-
-    sort(trackList.begin(), trackList.end(), [](const unique_ptr<Track> &a, const unique_ptr<Track> &b) {
-                  return a->orderInAlbum < b->orderInAlbum;});
 
     return 0;
 }
@@ -920,13 +964,7 @@ int Album::directoryToTracks(string path){
 *   Track Class Functions
 */
 Track::Track(string name, int order){
-    if(namePathCheck(name)){
-        this->name = name;
-    }else{
-        this->name = "";
-        cout << "Track name contains invalid characters" << endl;
-    }
-
+    this->name = name;
     this->order = order;
     this->orderInAlbum = order;
     this->fileName = "";
@@ -945,12 +983,7 @@ Track::Track(int order, string filePath){
 }
 
 Track::Track(json jsonSource){
-    if(namePathCheck(jsonSource["1Name"])){
-        this->name = jsonSource["1Name"];
-    }else{
-        this->name = "";
-        cout << "Track name contains invalid characters" << endl;
-    }
+    this->name = jsonSource["1Name"];
 
     if(namePathCheck(jsonSource["FileName"])){
         this->fileName = jsonSource["FileName"];
@@ -1041,12 +1074,8 @@ int Track::readMP3TagFrame(ifstream& f, const string& neededTagID, string* outpu
     uint frameSize;
     f.read(reinterpret_cast<char*>(&frameSize), sizeof(char) * 4);
 
-    char* pos = (char*) &frameSize;                                             //Reversal of the Bytes after reading to get the correct value of the 'tag_size'
-    for (uint i = 0; i < ((sizeof (uint)) / 2); i++){
-        pos [i] = pos [i] ^ pos [(sizeof (uint)) - i - 1];
-        pos [(sizeof (uint)) - i - 1] = pos [i] ^ pos [(sizeof (uint)) - i - 1];
-        pos [i] = pos [i] ^ pos [(sizeof (uint)) - i - 1];
-    }
+    char* pos = (char*) &frameSize;
+    frameSize = (uint)((pos[0] << 21) | (pos[1] << 14) | (pos[2] << 7) | pos[3]);
 
     if(tagID != neededTagID){
         f.ignore(2 + frameSize);
@@ -1061,7 +1090,7 @@ int Track::readMP3TagFrame(ifstream& f, const string& neededTagID, string* outpu
     return 0;
 }
 
-int Track::readFLACMetadataBlock(ifstream& f, const string& neededBlockType, string* output){
+int Track::readFLACMetadataBlock(ifstream& f, const string& neededInfoType, uint8_t neededBlock, string* output){
 
     if(!f || !f.is_open()) return 1;
 
@@ -1069,37 +1098,44 @@ int Track::readFLACMetadataBlock(ifstream& f, const string& neededBlockType, str
     f.read(reinterpret_cast<char*>(&header), sizeof(char) * 4);
     uint blockSize = (header[1] << 16) | (header[2] << 8) | header[3];
     
-    if((header[0] & 0x7F) != 4){
+    if((header[0] & 0x7F) != (int)neededBlock){
         if(header[0] & 0x80){
-            cout << "FLAC file does not contain information: " + neededBlockType << endl;
+            cout << "FLAC file does not contain information: " + neededInfoType << endl;
             return 1;
         }
         f.ignore(blockSize);
         
         
-        return readFLACMetadataBlock(f, neededBlockType, output);
+        return readFLACMetadataBlock(f, neededInfoType, neededBlock, output);
     }
 
-    unsigned char vendorLen[4];
-    f.read(reinterpret_cast<char*>(&vendorLen), sizeof(char) * 4);
+    if((header[0] & 0x7F) == 4){                                                //VORBIS_COMMENT Block
+        unsigned char vendorLen[4];
+        f.read(reinterpret_cast<char*>(&vendorLen), sizeof(char) * 4);
 
-    f.ignore(UcharArrayToUintLE(vendorLen));
+        f.ignore(UcharArrayToUintLE(vendorLen));
 
-    unsigned char vorbisFieldCount[4];
-    f.read(reinterpret_cast<char*>(&vorbisFieldCount), sizeof(char) * 4);
+        unsigned char vorbisFieldCount[4];
+        f.read(reinterpret_cast<char*>(&vorbisFieldCount), sizeof(char) * 4);
 
-    for(uint i = 0; i < UcharArrayToUintLE(vorbisFieldCount); i++){
-        unsigned char fieldSize[4];
-        f.read(reinterpret_cast<char*>(&fieldSize), sizeof(char) * 4);
-        string field(UcharArrayToUintLE(fieldSize)+1, '\0');
+        for(uint i = 0; i < UcharArrayToUintLE(vorbisFieldCount); i++){
+            unsigned char fieldSize[4];
+            f.read(reinterpret_cast<char*>(&fieldSize), sizeof(char) * 4);
+            string field(UcharArrayToUintLE(fieldSize)+1, '\0');
 
-        f.read(&field[0], UcharArrayToUintLE(fieldSize));
+            f.read(&field[0], UcharArrayToUintLE(fieldSize));
 
-        if(field.find(neededBlockType + "=") == 0){
-            *output = field.substr(field.find("=") + 1);
-            break;
+            if(field.find(neededInfoType + "=") == 0){
+                *output = field.substr(field.find("=") + 1);
+                break;
+            }
         }
+    }else if((header[0] & 0x7F) == 6){                                          // Picture Block
+
+        output->resize(blockSize);
+        f.read(&(*output)[0], blockSize);
     }
+
     return 0;
 
 }
@@ -1138,7 +1174,7 @@ int Track::readMP3TagFrameQt(QFile& f, const string& neededTagID, string* output
     return 0;
 }
 
-int Track::readFLACMetadataBlockQt(QFile& f, const string& neededBlockType, string* output){
+int Track::readFLACMetadataBlockQt(QFile& f, const string& neededInfoType, byte neededBlock, string* output){
 
     if(!f.isOpen()) return 1;
 
@@ -1147,7 +1183,7 @@ int Track::readFLACMetadataBlockQt(QFile& f, const string& neededBlockType, stri
 
     uint blockSize = (header[1] << 16) | (header[2] << 8) | header[3];
     
-    if((header[0] & 0x7F) != 4){
+    if((header[0] & 0x7F) != (int)neededBlock){
         if(header[0] & 0x80){
             cout << "FLAC file does not contain title information" << endl;
             return 1;
@@ -1155,7 +1191,7 @@ int Track::readFLACMetadataBlockQt(QFile& f, const string& neededBlockType, stri
         f.skip(blockSize);
         
         
-        return readFLACMetadataBlockQt(f, neededBlockType, output);
+        return readFLACMetadataBlockQt(f, neededInfoType, output);
     }
 
     unsigned char vendorLen[4];
@@ -1173,7 +1209,7 @@ int Track::readFLACMetadataBlockQt(QFile& f, const string& neededBlockType, stri
 
         f.read(&field[0], UcharArrayToUintLE(fieldSize));
 
-        if(field.find(neededBlockType + "=") == 0){
+        if(field.find(neededInfoType + "=") == 0){
             *output = field.substr(field.find("=") + 1);
             break;
         }
@@ -1203,19 +1239,20 @@ int Track::readFile(string fileName){
 
         f.read(reinterpret_cast<char*>(&tagHeader), sizeof(char) * 4);
 
-        if(tagHeader[0] != 0x66 && tagHeader[1] != 0x4c && tagHeader[2] != 0x61 && tagHeader[3] != 0x43){
+        if(memcmp(tagHeader, "\x66\x4c\x61\x43", 4)){
             cout << "\n Not flac : " << fileName << endl;
+            this->name = "ERROR READING TRACK FILE!!";
             f.close();
             return 1;
         }
         f.seekg(4);
 
-        if(readFLACMetadataBlock(f, "TITLE", &title)){
+        if(readFLACMetadataBlock(f, "TITLE", 4, &title)){
             return 1;
         }
         f.seekg(4);
 
-        if(readFLACMetadataBlock(f, "TRACKNUMBER", &ord)){
+        if(readFLACMetadataBlock(f, "TRACKNUMBER", 4, &ord)){
             return 1;
         }
 
@@ -1224,23 +1261,24 @@ int Track::readFile(string fileName){
 
         f.read(reinterpret_cast<char*>(&tagHeader), sizeof(char) * 3);
 
-        if(tagHeader[0] != 0x49 && tagHeader[1] != 0x44 && tagHeader[2] != 0x33){
+        if(memcmp(tagHeader, "\x49\x44\x33", 3)){
             cout << "\n Not ID3 : " << fileName << endl;
+            this->name = "ERROR READING TRACK FILE!!";
             f.close();
             return 1;
         }
         f.seekg(10);
 
         if(readMP3TagFrame(f, "TIT2", &title)){
-            return 1;
+            title = fileName.substr(fileName.rfind("/") + 1, fileName.npos);
         }
         f.seekg(10);
         
         if(readMP3TagFrame(f, "TRCK", &ord)){
-            return 1;
+            ord = "0";
         }
     }else{
-        this->name = filesystem::path(fileName).extension().string() + " file format is not supported";
+        this->name = fType + " file format is not supported";
 
         this->order = 0;
         this->orderInAlbum = 0;
@@ -1259,7 +1297,7 @@ int Track::readFile(string fileName){
 
     try {
         this->orderInAlbum = stoi(ord);
-    } catch (int e) {
+    } catch (...) {
         this->orderInAlbum = 0;
     }
     f.close();
@@ -1285,8 +1323,9 @@ int Track::readFile(string fileName){
 
         f.read(reinterpret_cast<char*>(&tagHeader), sizeof(char) * 4);
 
-        if(tagHeader[0] != 0x66 && tagHeader[1] != 0x4c && tagHeader[2] != 0x61 && tagHeader[3] != 0x43){
+        if(memcmp(tagHeader, "\x66\x4c\x61\x43", 4)){
             cout << "\n Not flac : " << fileName << endl;
+            this->name = "ERROR READING TRACK FILE!!";
             f.close();
             return 1;
         }
@@ -1306,8 +1345,9 @@ int Track::readFile(string fileName){
 
         f.read(reinterpret_cast<char*>(&tagHeader), sizeof(char) * 3);
 
-        if(tagHeader[0] != 0x49 && tagHeader[1] != 0x44 && tagHeader[2] != 0x33){
+        if(memcmp(tagHeader, "\x49\x44\33", 3)){
             cout << "\n Not ID3 : " << fileName << endl;
+            this->name = "ERROR READING TRACK FILE!!";
             f.close();
             return 1;
         }
@@ -1347,6 +1387,99 @@ int Track::readFile(string fileName){
     f.close();
     return 0;
 }
+#endif
+
+#if defined (PLATFORM_LINUX)
+
+int Track::getEmbededImage(vector<unsigned char>& buf, string rootPath){
+    if(!buf.empty() || rootPath == ""){
+        return 1;
+    }
+
+    ifstream f(rootPath + this->fileName, ios::binary);
+    if(!f.is_open()){
+        cout << "Error opening track file: " << this->fileName << endl;
+        return 1;
+    }
+
+    string fType = filesystem::path(fileName).extension().string();
+
+    string pic = "";
+    int offsetSize = -1;
+
+    if(fType == ".mp3"){
+        char tagHeader[3];
+
+        f.read(reinterpret_cast<char*>(&tagHeader), sizeof(char) * 3);
+
+        if(memcmp(tagHeader, "\x49\x44\x33", 3)){
+            cout << "Error reading track file: " << this->fileName << endl;
+            f.close();
+            return 1;
+        }
+        f.seekg(10);
+
+        if(readMP3TagFrame(f, "APIC", &pic)){
+            cout << "APIC tag not found in file: " << this->fileName << endl;
+        }
+
+        if(pic != ""){
+            int mimeTypeLen = pic.find('\0');
+            string mimeType = pic.substr(0, mimeTypeLen);
+            if(mimeType == "image/png" || mimeType == "image/jpeg"){
+                offsetSize = pic.find('\0', mimeTypeLen + 2) + 1;
+            }else{
+                cout << "unsupported cover embedded in track file: " << fileName << endl;
+            }
+        }
+
+    }else if(fType == ".flac"){
+        char tagHeader[4];
+
+        f.read(reinterpret_cast<char*>(&tagHeader), sizeof(char) * 4);
+
+        if(memcmp(tagHeader, "\x66\x4c\x61\x43", 4)){
+            cout << "\n Not flac : " << this->fileName << endl;
+            f.close();
+            return 1;
+        }
+        f.seekg(4);
+
+        if(readFLACMetadataBlock(f, "", 6, &pic)){
+            cout << "Picture block not found in file: " << this->fileName << endl;
+        }
+        
+        if(pic != ""){
+            offsetSize = 8;
+            int mimeTypeLen = (pic[4] << 24) | (pic[5] << 16) | (pic[6] <<  8) | (pic[7]);
+        
+            string mimeType = pic.substr(offsetSize, mimeTypeLen);
+
+            offsetSize += mimeTypeLen;
+            if(mimeType == "image/png" || mimeType == "image/jpeg"){
+
+                offsetSize = offsetSize + ((pic[offsetSize] << 24) | (pic[offsetSize + 1] << 16) | (pic[offsetSize + 2] <<  8) | (pic[offsetSize + 3]));
+                offsetSize += 6 * sizeof(uint32_t);
+            }else{
+                cout << "unsupported cover embedded in track file: " << fileName << endl;
+            }
+        }
+
+    }else{
+        this->name = fType + " file format is not supported";
+        f.close();
+        return 1;
+    }
+
+    if(offsetSize >= 0){
+        string picBuffer = pic.substr(offsetSize);
+        copy(picBuffer.begin(), picBuffer.end(), back_inserter(buf));
+    }
+
+    f.close();
+    return 0;
+}
+
 #endif
 
 void Track::printData(){
