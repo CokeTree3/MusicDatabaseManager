@@ -23,16 +23,7 @@ bool namePathCheck(const string& name){
 
 #if defined (PLATFORM_LINUX) || defined (PLATFORM_WINDOWS)
 int createNewFile(string path, string fName, string libPath){
-
-    filesystem::path fPath;
-
-#if defined (PLATFORM_WINDOWS)
-    fPath = filesystem::u8path(path + fName);
-#elif defined (PLATFORM_LINUX)
-    fPath = filesystem::path(path + fName);
-#endif
-
-    ofstream trackFile(fPath, ios::binary);
+    ofstream trackFile(filesystem::path(path + fName), ios::binary);
 
     if(!trackFile.is_open()){
         cout << "error creating a new file: " << path + fName << endl;
@@ -201,7 +192,7 @@ int Library::jsonRead(){
         ifstream f;
         json jsonData;
         try{
-            f.open(libFile, ios::binary);
+            f.open(filesystem::path(libFile), ios::binary);
             jsonData = json::parse(f);
             f.close();
         }catch(...){
@@ -807,10 +798,10 @@ void Album::setCover(string rootPath){
 
         for(auto const& fileEntry : filesystem::directory_iterator(rootPath)){
             if(filesystem::is_regular_file(fileEntry)){
-                string ext = fileEntry.path().extension();
+                string ext = fileEntry.path().extension().string();
                 if(ext == ".jpg" || ext == ".png" || ext == ".ico" || ext == ".jpeg"){
                     found = true;
-                    this->coverPath = fileEntry.path();
+                    this->coverPath = fileEntry.path().string();
                     break;
                 }
             }
@@ -824,10 +815,6 @@ void Album::setCover(string rootPath){
 
     if(coverPath == "" && trackCount > 0){
         trackList[0]->getEmbededImage(this->coverBuf, rootPath + "/");
-        if(this->coverBuf.empty()){
-            cout << "returned empty" << endl;
-        }
-
     }
 
 #elif defined (PLATFORM_ANDROID)
@@ -934,7 +921,9 @@ int Album::directoryToTracks(string path){
 
         string fType = i->path().extension().string();
         if(fType == ".mp3" || fType == ".flac"){
-            addTrack(trackOrder, i->path().string());
+            auto u8 = i->path().u8string();                                 // to allow both C++17 and >C++20 compilation
+            string s(u8.begin(), u8.end());
+            addTrack(trackOrder, s);
             trackOrder++;
         }
     }
@@ -1063,23 +1052,33 @@ int Track::implementDiff(Album& mainLibAlbum, string rootPath, const string libP
     return 0;
 }
 
-#if defined (PLATFORM_LINUX)// || defined (PLATFORM_WINDOWS)                                Windows currently temporarly moved to QT approach
-int Track::readMP3TagFrame(ifstream& f, const string& neededTagID, string* output){
+#if defined (PLATFORM_LINUX) || defined (PLATFORM_WINDOWS)
+int Track::readMP3TagFrame(ifstream& f, const string& neededTagID, char ID3Version, string* output){
 
     if(!f || !f.is_open()) return 1;
 
     string tagID(4, '\0');
     f.read(&tagID[0], 4);
 
-    uint frameSize;
-    f.read(reinterpret_cast<char*>(&frameSize), sizeof(char) * 4);
+    uchar frameSizeBuf[4];
+    uint32_t frameSize = 0;
+    f.read(reinterpret_cast<char*>(&frameSizeBuf), sizeof(uchar) * 4);
 
-    char* pos = (char*) &frameSize;
-    frameSize = (uint)((pos[0] << 21) | (pos[1] << 14) | (pos[2] << 7) | pos[3]);
+    if(ID3Version == 3){
+        frameSize = (uint32_t)((frameSizeBuf[0] << 24) | (frameSizeBuf[1] << 16) | (frameSizeBuf[2] << 8) | frameSizeBuf[3]);
+    }else if(ID3Version == 4){
+        frameSize = (uint32_t)((frameSizeBuf[0] << 21) | (frameSizeBuf[1] << 14) | (frameSizeBuf[2] << 7) | frameSizeBuf[3]);
+    }else{
+        cout << "Unsupported ID3v2 version" << endl;
+        return 1;
+    }
 
     if(tagID != neededTagID){
         f.ignore(2 + frameSize);
-        return readMP3TagFrame(f, neededTagID, output);
+        if(f.peek() == '\0'){
+            f.ignore(1);
+        }
+        return readMP3TagFrame(f, neededTagID, ID3Version,  output);
     }
     
     f.ignore(3);
@@ -1141,28 +1140,28 @@ int Track::readFLACMetadataBlock(ifstream& f, const string& neededInfoType, uint
 }
 #endif
 
-#if defined (PLATFORM_ANDROID)  || defined (PLATFORM_WINDOWS)
-int Track::readMP3TagFrameQt(QFile& f, const string& neededTagID, string* output){
+#if defined (PLATFORM_ANDROID)
+int Track::readMP3TagFrameQt(QFile& f, const string& neededTagID, char ID3Version, string* output){
 
     if(!f.isOpen()) return 1;
 
     string tagID(4, '\0');
     f.read(&tagID[0], 4);
 
-    uint frameSize;
-    f.read(reinterpret_cast<char*>(&frameSize), sizeof(char) * 4);
+    uchar frameSizeBuf[4];
+    uint32_t frameSize;
+    f.read(reinterpret_cast<char*>(&frameSizeBuf), sizeof(uchar) * 4);
 
-    char* pos = (char*) &frameSize;                                             //Reversal of the Bytes after reading to get the correct value of the 'tag_size'
-    for (uint i = 0; i < ((sizeof (uint)) / 2); i++){
-        pos [i] = pos [i] ^ pos [(sizeof (uint)) - i - 1];
-        pos [(sizeof (uint)) - i - 1] = pos [i] ^ pos [(sizeof (uint)) - i - 1];
-        pos [i] = pos [i] ^ pos [(sizeof (uint)) - i - 1];
+    if(ID3Version == 3){
+        frameSize = (uint32_t)((frameSizeBuf[0] << 24) | (frameSizeBuf[1] << 16) | (frameSizeBuf[2] << 8) | frameSizeBuf[3]);
+    }else if(ID3Version == 4){
+        frameSize = (uint32_t)((frameSizeBuf[0] << 21) | (frameSizeBuf[1] << 14) | (frameSizeBuf[2] << 7) | frameSizeBuf[3]);
     }
 
     if(tagID != neededTagID){
         f.skip(2 + frameSize);
         
-        return readMP3TagFrameQt(f, neededTagID, output);
+        return readMP3TagFrameQt(f, neededTagID, ID3Version, output);
     }
     
     
@@ -1220,14 +1219,13 @@ int Track::readFLACMetadataBlockQt(QFile& f, const string& neededInfoType, byte 
 #endif
 
 
-#if defined (PLATFORM_LINUX)// || defined (PLATFORM_WINDOWS)
+#if defined (PLATFORM_LINUX) || defined (PLATFORM_WINDOWS)
 
 int Track::readFile(string fileName){
 
-    ifstream f(fileName, ios::binary);
+    
+    ifstream f(filesystem::path(fileName), ios::binary);
     if(!f.is_open()){
-        cout << "can't open -> " ;
-        printf("%x %x %x %x ", fileName[51], fileName[52], fileName[53], fileName[54]);
         return 1;
     }
     string title = "";
@@ -1267,14 +1265,17 @@ int Track::readFile(string fileName){
             f.close();
             return 1;
         }
+        char ID3Version;
+        f.read(&ID3Version,sizeof(char));
+
         f.seekg(10);
 
-        if(readMP3TagFrame(f, "TIT2", &title)){
+        if(readMP3TagFrame(f, "TIT2", ID3Version, &title)){
             title = fileName.substr(fileName.rfind("/") + 1, fileName.npos);
         }
         f.seekg(10);
         
-        if(readMP3TagFrame(f, "TRCK", &ord)){
+        if(readMP3TagFrame(f, "TRCK", ID3Version, &ord)){
             ord = "0";
         }
     }else{
@@ -1303,100 +1304,13 @@ int Track::readFile(string fileName){
     f.close();
     return 0;
 }
-#endif
-
-#if defined (PLATFORM_ANDROID) || defined (PLATFORM_WINDOWS)
-
-int Track::readFile(string fileName){
-
-    QFile f(QString::fromStdString(fileName));
-    if(!f.open(QIODevice::ReadOnly)){
-        return 1;
-    }
-
-    string title = "";
-    string ord = "";
-    string fType= "." + QFileInfo(QString::fromStdString(fileName)).suffix().toStdString();
-
-    if(fType == ".flac"){
-        char tagHeader[4];
-
-        f.read(reinterpret_cast<char*>(&tagHeader), sizeof(char) * 4);
-
-        if(memcmp(tagHeader, "\x66\x4c\x61\x43", 4)){
-            cout << "\n Not flac : " << fileName << endl;
-            this->name = "ERROR READING TRACK FILE!!";
-            f.close();
-            return 1;
-        }
-        f.seek(4);
-
-        if(readFLACMetadataBlockQt(f, "TITLE", &title)){
-            return 1;
-        }
-        f.seek(4);
-
-        if(readFLACMetadataBlockQt(f, "TRACKNUMBER", &ord)){
-            return 1;
-        }
-
-    }else if(fType == ".mp3"){
-        char tagHeader[3];
-
-        f.read(reinterpret_cast<char*>(&tagHeader), sizeof(char) * 3);
-
-        if(memcmp(tagHeader, "\x49\x44\33", 3)){
-            cout << "\n Not ID3 : " << fileName << endl;
-            this->name = "ERROR READING TRACK FILE!!";
-            f.close();
-            return 1;
-        }
-        f.seek(10);
-
-        if(readMP3TagFrameQt(f, "TIT2", &title)){
-            return 1;
-        }
-        f.seek(10);
-        
-        if(readMP3TagFrameQt(f, "TRCK", &ord)){
-            return 1;
-        }
-    }else{
-        this->name = "." + QFileInfo(QString::fromStdString(fileName)).suffix().toStdString() + " file format is not supported";
-
-        this->order = 0;
-        this->orderInAlbum = 0;
-        f.close();
-        return 0;
-    }
-
-    title = title.substr(0, title.find_last_not_of("\0"));
-    if(title.rbegin()[0] == '\0'){
-        title.pop_back();
-    }
-    this->name = title;
-
-    ord = ord.substr(0, ord.find_last_not_of("\0"));
-    ord = ord.substr(0, ord.find("/"));
-
-    try {
-        this->orderInAlbum = stoi(ord);
-    } catch (int e) {
-        this->orderInAlbum = 0;
-    }
-    f.close();
-    return 0;
-}
-#endif
-
-#if defined (PLATFORM_LINUX)
 
 int Track::getEmbededImage(vector<unsigned char>& buf, string rootPath){
     if(!buf.empty() || rootPath == ""){
         return 1;
     }
 
-    ifstream f(rootPath + this->fileName, ios::binary);
+    ifstream f(filesystem::path(rootPath + this->fileName), ios::binary);
     if(!f.is_open()){
         cout << "Error opening track file: " << this->fileName << endl;
         return 1;
@@ -1417,9 +1331,11 @@ int Track::getEmbededImage(vector<unsigned char>& buf, string rootPath){
             f.close();
             return 1;
         }
-        f.seekg(10);
+        char ID3Version;
+        f.read(&ID3Version,sizeof(char));
 
-        if(readMP3TagFrame(f, "APIC", &pic)){
+        f.seekg(10);
+        if(readMP3TagFrame(f, "APIC", ID3Version, &pic)){
             cout << "APIC tag not found in file: " << this->fileName << endl;
         }
 
@@ -1479,7 +1395,93 @@ int Track::getEmbededImage(vector<unsigned char>& buf, string rootPath){
     f.close();
     return 0;
 }
+#endif
 
+#if defined (PLATFORM_ANDROID)
+
+int Track::readFile(string fileName){
+
+    QFile f(QString::fromStdString(fileName));
+    if(!f.open(QIODevice::ReadOnly)){
+        return 1;
+    }
+
+    string title = "";
+    string ord = "";
+    string fType= "." + QFileInfo(QString::fromStdString(fileName)).suffix().toStdString();
+
+    if(fType == ".flac"){
+        char tagHeader[4];
+
+        f.read(reinterpret_cast<char*>(&tagHeader), sizeof(char) * 4);
+
+        if(memcmp(tagHeader, "\x66\x4c\x61\x43", 4)){
+            cout << "\n Not flac : " << fileName << endl;
+            this->name = "ERROR READING TRACK FILE!!";
+            f.close();
+            return 1;
+        }
+        f.seek(4);
+
+        if(readFLACMetadataBlockQt(f, "TITLE", &title)){
+            return 1;
+        }
+        f.seek(4);
+
+        if(readFLACMetadataBlockQt(f, "TRACKNUMBER", &ord)){
+            return 1;
+        }
+
+    }else if(fType == ".mp3"){
+        char tagHeader[3];
+
+        f.read(reinterpret_cast<char*>(&tagHeader), sizeof(char) * 3);
+
+        if(memcmp(tagHeader, "\x49\x44\33", 3)){
+            cout << "\n Not ID3 : " << fileName << endl;
+            this->name = "ERROR READING TRACK FILE!!";
+            f.close();
+            return 1;
+        }
+        char ID3Version;
+        f.read(&ID3Version,sizeof(char));
+
+        f.seek(10);
+
+        if(readMP3TagFrameQt(f, "TIT2", ID3Version, &title)){
+            return 1;
+        }
+        f.seek(10);
+        
+        if(readMP3TagFrameQt(f, "TRCK", ID3Version, &ord)){
+            return 1;
+        }
+    }else{
+        this->name = "." + QFileInfo(QString::fromStdString(fileName)).suffix().toStdString() + " file format is not supported";
+
+        this->order = 0;
+        this->orderInAlbum = 0;
+        f.close();
+        return 0;
+    }
+
+    title = title.substr(0, title.find_last_not_of("\0"));
+    if(title.rbegin()[0] == '\0'){
+        title.pop_back();
+    }
+    this->name = title;
+
+    ord = ord.substr(0, ord.find_last_not_of("\0"));
+    ord = ord.substr(0, ord.find("/"));
+
+    try {
+        this->orderInAlbum = stoi(ord);
+    } catch (int e) {
+        this->orderInAlbum = 0;
+    }
+    f.close();
+    return 0;
+}
 #endif
 
 void Track::printData(){

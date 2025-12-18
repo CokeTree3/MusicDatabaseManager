@@ -31,13 +31,13 @@ class Track{
         
         
 
-        #if defined (PLATFORM_LINUX)// || defined (PLATFORM_WINDOWS)                        Windows currently temporarly moved to QT approach                
-            int readMP3TagFrame(ifstream& f, const string& neededTagID, string* output);
+        #if defined (PLATFORM_LINUX) || defined (PLATFORM_WINDOWS)          
+            int readMP3TagFrame(ifstream& f, const string& neededTagID, char ID3Version, string* output);
             int readFLACMetadataBlock(ifstream& f, const string& neededInfoType, uint8_t neededBlock, string* output);
         #endif
 
-        #if defined (PLATFORM_ANDROID) || defined (PLATFORM_WINDOWS)
-            int readMP3TagFrameQt(QFile& f, const string& neededTagID, string* output);
+        #if defined (PLATFORM_ANDROID)
+            int readMP3TagFrameQt(QFile& f, const string& neededTagID, char ID3Version, string* output);
             int readFLACMetadataBlockQt(QFile& f, const string& neededInfoType, uint8_t neededBlock, string* output);
         #endif
 };

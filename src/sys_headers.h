@@ -35,10 +35,11 @@ extern string     remoteAddr;
 #if defined (PLATFORM_WINDOWS)
 
 #include <filesystem>
-#include <QDirIterator>
-#include <QFile>
-#include <QDir>
-#include <QFileInfo>
+
+inline std::filesystem::path path(const std::string& p) {
+    return std::filesystem::u8path(p);
+}
+
 
 #endif
 
