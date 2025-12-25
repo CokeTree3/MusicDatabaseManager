@@ -47,26 +47,32 @@ During synchronization a selection window allows to deselect specific tracks, al
 
 If already exists locally, the library needs to follow a structure of *root* - *Artist Name* - *Album Name* - *Tracks*, where the Artists and Albums are directories. The Album directory can optionally contain a *jpg* or *png* file that will be loaded as the album cover. If not provided, the cover image will be taken from the embedded cover of the first track in the album, and if this is not available, the default image will be used(from /assets directory)
 
+The app has both client and server modes built in. The default is the client mode, but with a switch in the *File* menu, the server mode can be enabled and the local library synced to any connecting device.
+
+Once started, the server operates independently and will synchronize local content with other clients that are connecting to the address of the device.
 
 ## Building
 
-Currently the project uses the QMake building system from Qt, but I might switch over to CMake soon.
+Building the binaries requires CMake to be installed.
+
+By default, the Linux platform is targeted but this can be changed to Windows using:
+```
+cmake -S . -B <Build-Directory> -DCMAKE_BUILD_TYPE=Release -DTARGET_PLATFORM=WINDOWS
+```
+Note: If building for windows is done on Linux or any other system where Mingw32 is not the default compiler, a `-DCMAKE_CXX_COMPILER=i686-w64-mingw32.static-g++` option also needs to be added to the command. The same applies in the other direction.
+
+`-DTARGET_PLATFORM=LINUX` is used to switch back to Linux targeting.
+
+To build the binary `cmake --build <Build-Directory>` can be used.
 
 At least C++ version C++17 is required, as well as g++ for Linux and MingW for Windows. 
 
-Building the binaries requires these libraries to be installed:
+Building the binaries also requires these libraries to be installed for the correct platform:
 - Qt(5+)
 - [JSON for Modern C++](https://github.com/nlohmann/json)
 - [asio C++ library](https://think-async.com/Asio/AsioStandalone.html)
 
-Building for android can be done using Android NDK
-
-When targeting platforms other than Linux, the .pro QMake file requires uncommenting some lines for the specific platform.
-
-
-
-
-The app has both client and server modes built in. The default is the client mode, but with a switch in the *File* menu, the server mode can be enabled and the local library synced to any connecting device.
+Building for android can be done using Android NDK (No CMake support yet, requires QMake)
 
 
 ## Future Plans
@@ -78,7 +84,7 @@ Some features I plan to add:
 * Improved UI
 * A CLI server binary, with no Qt dependency
 * Local track importing(managing artist and album directories)
-* Android Studio/Kotlin based Android app
+* Android Studio/Kotlin based Android app(Current NDK approach is convoluted and broken)
 * Server funcionality on Android
 * Playlist file syncronization
 * \+ more 

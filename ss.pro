@@ -14,8 +14,8 @@ INCLUDEPATH += .
 #DEFINES += QT_DISABLE_DEPRECATED_BEFORE=0x060000    # disables all the APIs deprecated before Qt 6.0.0
 
 # Input
-HEADERS += src/app.h src/config.h src/gui.h src/library.h src/sys_headers.h src/networking.h
-SOURCES += src/app.cpp src/gui.cpp src/library.cpp src/networking.cpp src/networking_android.cpp
+HEADERS += src/app.h src/config.h src/gui.h src/library.h src/sys_headers.h src/networking.h src/cli.h
+SOURCES += src/app.cpp src/gui.cpp src/library.cpp src/networking.cpp src/networking_android.cpp src/cli.cpp
 CONFIG += c++20
 
 QMAKE_CXXFLAGS += -Wall -Wextra -Werror -Wpointer-arith -Wcast-qual \
