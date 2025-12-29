@@ -1,7 +1,7 @@
 #include "library.h"
 
-uint UcharArrayToUintLE(const unsigned char bytes[4]){
-    return (uint)((bytes[0]) | ((bytes[1]) << 8) | ((bytes[2]) << 16) | ((bytes[3]) << 24));
+unsigned int UcharArrayToUintLE(const unsigned char bytes[4]){
+    return (unsigned int)((bytes[0]) | ((bytes[1]) << 8) | ((bytes[2]) << 16) | ((bytes[3]) << 24));
 }
 
 bool namePathCheck(const string& name){
@@ -111,7 +111,7 @@ void makeDir(string absolutePath){                                          // D
         cout << "ERROR: couldn't create directory: " << absolutePath << "\n Error: " << ec.message() << endl;
     }
 #endif
-    Q_UNUSED(absolutePath);
+    (void)absolutePath;
     return;
 }
 
@@ -334,12 +334,14 @@ void Library::resetLibrary(){
 }
 
 void Library::printData(){
+    cout << "------------------------------------------------" << endl;
     cout << "Artists in the database: \n";
     int count = 1;
     for(size_t i = 0; i < artistList.size(); i++){
         cout << count << ".  " << artistList[i]->name << endl;
         count++;
     }
+    cout << "------------------------------------------------" << endl;
 }
 
 void Library::displayData(){
@@ -348,10 +350,18 @@ void Library::displayData(){
     if(artistList.size() > 0){
         cout << "Select which artist to display: ";
         int nr = 0;
-        while (!(cin >> nr) || nr < 1 || nr > (int)artistList.size()) {
+        string inp;
+
+        while(getline(cin, inp)){
+            if(!inp.empty()){
+                stringstream inpStream(inp);
+                inpStream >> nr;
+            }else{
+                nr = 1;
+            }
+            if(nr > 0 && nr <= static_cast<int>(artistList.size())) break;
             cout << "Invalid input. Please enter a valid integer: ";
             cin.clear(); 
-            cin.ignore(numeric_limits<streamsize>::max(), '\n');
         }
     
         artistList[nr-1]->displayData();
@@ -427,10 +437,12 @@ Artist::Artist(Artist& toCopyFrom, string fullPath, string libPath){
 
 
 void Artist::printData(){
+    cout << "------------------------------------------------" << endl;
     cout << name << " albums - \n";
     for(size_t i = 0; i < albumCount; i++){
         cout << i + 1 << ". " << albumList[i]->name << endl;
     }
+    cout << "------------------------------------------------" << endl;
 }
 
 void Artist::displayData(){
@@ -439,11 +451,20 @@ void Artist::displayData(){
     if(albumList.size() > 0){
         cout << "Select which album to display: ";
         int nr = 0;
-        while (!(cin >> nr) || nr < 1 || nr > (int)albumList.size()) {
+        string inp;
+
+        while(getline(cin, inp)){
+            if(!inp.empty()){
+                stringstream inpStream(inp);
+                inpStream >> nr;
+            }else{
+                nr = 1;
+            }
+            if(nr > 0 && nr <= static_cast<int>(albumList.size())) break;
             cout << "Invalid input. Please enter a valid integer: ";
             cin.clear(); 
-            cin.ignore(numeric_limits<streamsize>::max(), '\n');
         }
+
         albumList[nr-1]->printData();
     }
 }
@@ -774,8 +795,10 @@ int Album::implementDiff(Artist& mainLibArtist, string rootPath, const string li
 
 
 void Album::printData(){
+    cout << "------------------------------------------------" << endl;
     cout << name << " with "<< trackCount << " Tracks: \n";
     this->printTracks();
+    cout << "------------------------------------------------" << endl;
 }
 
 void Album::printTracks(){
@@ -1039,9 +1062,8 @@ int Track::implementDiff(Album& mainLibAlbum, string rootPath, const string libP
     }
     bool found = false;
     for(size_t i = 0; i < mainLibAlbum.trackList.size(); i++){
-        if(this->name == mainLibAlbum.trackList[i]->name){
+        if(this->name == mainLibAlbum.trackList[i]->name && this->fileName == mainLibAlbum.trackList[i]->fileName){
             found = true;
-            cout << "This should never happen" << endl;                         // This should never happen
             break;
         }
     }
@@ -1060,9 +1082,9 @@ int Track::readMP3TagFrame(ifstream& f, const string& neededTagID, char ID3Versi
     string tagID(4, '\0');
     f.read(&tagID[0], 4);
 
-    uchar frameSizeBuf[4];
+    unsigned char frameSizeBuf[4];
     uint32_t frameSize = 0;
-    f.read(reinterpret_cast<char*>(&frameSizeBuf), sizeof(uchar) * 4);
+    f.read(reinterpret_cast<char*>(&frameSizeBuf), sizeof(char) * 4);
 
     if(ID3Version == 3){
         frameSize = (uint32_t)((frameSizeBuf[0] << 24) | (frameSizeBuf[1] << 16) | (frameSizeBuf[2] << 8) | frameSizeBuf[3]);
@@ -1095,7 +1117,7 @@ int Track::readFLACMetadataBlock(ifstream& f, const string& neededInfoType, uint
 
     unsigned char header[4];
     f.read(reinterpret_cast<char*>(&header), sizeof(char) * 4);
-    uint blockSize = (header[1] << 16) | (header[2] << 8) | header[3];
+    unsigned int blockSize = (header[1] << 16) | (header[2] << 8) | header[3];
     
     if((header[0] & 0x7F) != (int)neededBlock){
         if(header[0] & 0x80){
@@ -1117,7 +1139,7 @@ int Track::readFLACMetadataBlock(ifstream& f, const string& neededInfoType, uint
         unsigned char vorbisFieldCount[4];
         f.read(reinterpret_cast<char*>(&vorbisFieldCount), sizeof(char) * 4);
 
-        for(uint i = 0; i < UcharArrayToUintLE(vorbisFieldCount); i++){
+        for(unsigned int i = 0; i < UcharArrayToUintLE(vorbisFieldCount); i++){
             unsigned char fieldSize[4];
             f.read(reinterpret_cast<char*>(&fieldSize), sizeof(char) * 4);
             string field(UcharArrayToUintLE(fieldSize)+1, '\0');
@@ -1148,9 +1170,9 @@ int Track::readMP3TagFrameQt(QFile& f, const string& neededTagID, char ID3Versio
     string tagID(4, '\0');
     f.read(&tagID[0], 4);
 
-    uchar frameSizeBuf[4];
+    unsigned char frameSizeBuf[4];
     uint32_t frameSize;
-    f.read(reinterpret_cast<char*>(&frameSizeBuf), sizeof(uchar) * 4);
+    f.read(reinterpret_cast<char*>(&frameSizeBuf), sizeof(char) * 4);
 
     if(ID3Version == 3){
         frameSize = (uint32_t)((frameSizeBuf[0] << 24) | (frameSizeBuf[1] << 16) | (frameSizeBuf[2] << 8) | frameSizeBuf[3]);
@@ -1180,7 +1202,7 @@ int Track::readFLACMetadataBlockQt(QFile& f, const string& neededInfoType, byte 
     unsigned char header[4];
     f.read(reinterpret_cast<char*>(&header), sizeof(char) * 4);
 
-    uint blockSize = (header[1] << 16) | (header[2] << 8) | header[3];
+    unsigned int blockSize = (header[1] << 16) | (header[2] << 8) | header[3];
     
     if((header[0] & 0x7F) != (int)neededBlock){
         if(header[0] & 0x80){
@@ -1201,7 +1223,7 @@ int Track::readFLACMetadataBlockQt(QFile& f, const string& neededInfoType, byte 
     unsigned char vorbisFieldCount[4];
     f.read(reinterpret_cast<char*>(&vorbisFieldCount), sizeof(char) * 4);
 
-    for(uint i = 0; i < UcharArrayToUintLE(vorbisFieldCount); i++){
+    for(unsigned int i = 0; i < UcharArrayToUintLE(vorbisFieldCount); i++){
         unsigned char fieldSize[4];
         f.read(reinterpret_cast<char*>(&fieldSize), sizeof(char) * 4);
         string field(UcharArrayToUintLE(fieldSize)+1, '\0');

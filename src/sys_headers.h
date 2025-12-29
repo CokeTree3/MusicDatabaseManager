@@ -12,10 +12,8 @@
 #include <cstdint>
 #include <unistd.h>
 #include <fstream>
+#include <sstream>
 #include <nlohmann/json.hpp>
-#include <QWidget>
-#include <QApplication>
-
 
 
 using namespace std;

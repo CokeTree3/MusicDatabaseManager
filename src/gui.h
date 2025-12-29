@@ -1,8 +1,11 @@
 
-#include "qtreewidget.h"
 #include "sys_headers.h"
 #include "networking.h"
 #include "library.h"
+#include <QWidget>
+#include <QApplication>
+#include <QtConcurrent>
+
 #include <QPushButton>
 #include <QInputDialog>
 #include <QMessageBox>
@@ -18,7 +21,6 @@
 #include <QPixmap>
 #include <QMouseEvent>
 #include <QFileDialog>
-#include <QtConcurrent>
 #include <QFuture>
 #include <QCheckBox>
 #include <QDialog>

@@ -47,7 +47,7 @@ private:
             error_code ec;
             readDataSize(&socket_, &recvSize, ec);
             if(ec == asio::error::eof || ec == asio::error::connection_reset){
-                cout << "Conn closed" << endl;
+                cout << "Client disconnected" << endl;
                 break;
             }else if(ec){
                 cout << "Server Error!!\n" << ec.message() << endl;
@@ -107,7 +107,7 @@ private:
                     continue;
                 }
             }else if(ec == asio::error::eof || ec == asio::error::connection_reset){
-                cout << "Conn closed\n";
+                cout << "Client disconnected\n";
                 break;
             }else{
                 cout << "Server Error!!\n" << ec.message() << endl;

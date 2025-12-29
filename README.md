@@ -51,6 +51,13 @@ The app has both client and server modes built in. The default is the client mod
 
 Once started, the server operates independently and will synchronize local content with other clients that are connecting to the address of the device.
 
+By default the binary runs in GUI mode and all interactions can be done through the GUI.
+Support is added for a few launch arguments:
+
+* `-l <Library_path>` - Specify a path to a library to load, overriding a previously set library path
+* `--no-gui` - Operate in CLI mode (Not required for the CLI-only binary)
+* `-h`, `--help` - Print this explanation of command arguments and usage
+
 ## Building
 
 Building the binaries requires CMake to be installed.
@@ -61,14 +68,15 @@ cmake -S . -B <Build-Directory> -DCMAKE_BUILD_TYPE=Release -DTARGET_PLATFORM=WIN
 ```
 Note: If building for windows is done on Linux or any other system where Mingw32 is not the default compiler, a `-DCMAKE_CXX_COMPILER=i686-w64-mingw32.static-g++` option also needs to be added to the command. The same applies in the other direction.
 
-`-DTARGET_PLATFORM=LINUX` is used to switch back to Linux targeting.
+`-DTARGET_PLATFORM=<LINUX|WINDOWS>` is used to switch between the targeted platform.
+`-DCLI_ONLY=<OFF|ON>` can be used to switch between a GUI or CLI versions of the binary (The CLI version removes QT dependency)
 
 To build the binary `cmake --build <Build-Directory>` can be used.
 
 At least C++ version C++17 is required, as well as g++ for Linux and MingW for Windows. 
 
 Building the binaries also requires these libraries to be installed for the correct platform:
-- Qt(5+)
+- Qt 5+ (Not required if built in CLI mode)
 - [JSON for Modern C++](https://github.com/nlohmann/json)
 - [asio C++ library](https://think-async.com/Asio/AsioStandalone.html)
 
