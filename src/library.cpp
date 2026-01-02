@@ -1,5 +1,9 @@
 #include "library.h"
 
+/*
+* Helper functions for Library classes
+*/
+
 unsigned int UcharArrayToUintLE(const unsigned char bytes[4]){
     return (unsigned int)((bytes[0]) | ((bytes[1]) << 8) | ((bytes[2]) << 16) | ((bytes[3]) << 24));
 }
@@ -117,6 +121,7 @@ void makeDir(string absolutePath){                                          // D
 
 /*
 *   Library Class Functions
+*   (Function documentation in header file)
 */
 int Library::buildLibrary(string searchDir){
     if(searchDir == "" || !filesystem::exists(searchDir)){
@@ -135,7 +140,7 @@ int Library::buildLibrary(string searchDir){
         if(!i->is_directory()){
             continue;
         }
-        this->addToLibrary(i->path().lexically_relative(searchDir).string(), i->path().string());
+        this->addToLibrary(i->path().string());
     }
 #elif defined (PLATFORM_ANDROID)
 
@@ -302,11 +307,12 @@ int Library::implementDiff(Library &diffLib){
         if(diffLib.artistList[i]->implementDiff(*this, libPath, libPath)) return 1;
     }
     
+    
     return 0;
 }
 
-int Library::addToLibrary(string name, string dirPath){
-    artistList.push_back(make_unique<Artist>(name, dirPath));
+int Library::addToLibrary(string dirPath){
+    artistList.push_back(make_unique<Artist>(dirPath));
     return artistList.size() - 1;
 }
 
@@ -372,19 +378,12 @@ void Library::displayData(){
 
 /*
 *   Artist Class Functions
+*   (Function documentation in header file)
 */
-Artist::Artist(string name){
-    if(namePathCheck(name)){
-        this->name = name;
-    }else{
-        this->name = "";
-        cout << "Artist name contains invalid characters" << endl;
-    }
 
-    albumCount = 0;
-}
+Artist::Artist(string dirPath){
+    string name = filesystem::path(dirPath).filename().string();
 
-Artist::Artist(string name, string dirPath){
     if(namePathCheck(name)){
         this->name = name;
     }else{
@@ -572,8 +571,8 @@ json Artist::getEmptyJsonStructure(){
     return data;
 }
 
-int Artist::addAlbum(string name, string dirPath){
-    albumList.push_back(make_unique<Album>(name, dirPath));
+int Artist::addAlbum(string dirPath){
+    albumList.push_back(make_unique<Album>(dirPath));
     albumCount++;
     return albumCount - 1;
 }
@@ -608,7 +607,7 @@ int Artist::directoryToAlbums(string path){
         if(!i->is_directory()){
             continue;
         }
-        addAlbum(i->path().lexically_relative(path).string(), i->path().string());
+        addAlbum(i->path().string());
     }
 
 #elif defined (PLATFORM_ANDROID)
@@ -629,21 +628,11 @@ int Artist::directoryToAlbums(string path){
 
 /*
 *   Album Class Functions
+*   (Function documentation in header file)
 */
-Album::Album(string name){
-    if(namePathCheck(name)){
-        this->name = name;
-    }else{
-        this->name = "";
-        cout << "Album name contains invalid characters" << endl;
-    }
+Album::Album(string dirPath){
+    string name = filesystem::path(dirPath).filename().string();
 
-    trackCount = 0;
-
-    setCover("");
-}
-
-Album::Album(string name, string dirPath){
     if(namePathCheck(name)){
         this->name = name;
     }else{
@@ -974,16 +963,10 @@ int Album::directoryToTracks(string path){
 
 /*
 *   Track Class Functions
+*   (Function documentation in header file)
 */
-Track::Track(string name, int order){
-    this->name = name;
-    this->order = order;
-    this->orderInAlbum = order;
-    this->fileName = "";
-}
-
 Track::Track(int order, string filePath){
-    this->order = order;
+    this->orderInAlbum = order;
     if(readFile(filePath)){
         cout << "file reading error: " << filePath << endl;
     }
@@ -1009,13 +992,11 @@ Track::Track(json jsonSource){
         return;
     }
     this->orderInAlbum = jsonSource["Order"];
-    this->order = this->orderInAlbum;
 }
 
 Track::Track(Track& toCopyFrom){
     this->name = toCopyFrom.name;
     this->orderInAlbum = toCopyFrom.orderInAlbum;
-    this->order = toCopyFrom.order;
     this->fileName = toCopyFrom.fileName;
 }
 
@@ -1030,7 +1011,7 @@ json Track::getJsonStructure(){
     json data;
     try{
         if((unsigned char)this->name[0] == 0xff){
-            cout << "QWQWQWQWQW " << name << order << endl;
+            cout << "QWQWQWQWQW " << name << orderInAlbum << endl;
         }
             
         data["1Name"] = this->name;
@@ -1302,9 +1283,8 @@ int Track::readFile(string fileName){
         }
     }else{
         this->name = fType + " file format is not supported";
-
-        this->order = 0;
         this->orderInAlbum = 0;
+
         f.close();
         return 0;
     }
@@ -1481,7 +1461,6 @@ int Track::readFile(string fileName){
     }else{
         this->name = "." + QFileInfo(QString::fromStdString(fileName)).suffix().toStdString() + " file format is not supported";
 
-        this->order = 0;
         this->orderInAlbum = 0;
         f.close();
         return 0;
@@ -1507,6 +1486,6 @@ int Track::readFile(string fileName){
 #endif
 
 void Track::printData(){
-    cout << "Song " << this->name << ", track nr: "<< this->order << "\n";
+    cout << "Song " << this->name << ", track nr: "<< this->orderInAlbum << "\n";
 }
 
